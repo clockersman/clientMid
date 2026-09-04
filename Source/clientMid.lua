@@ -419,6 +419,16 @@ else
     nm.TextYAlignment = Enum.TextYAlignment.Center
 end
 
+local refreshLeaderstats
+
+local lsc = Instance.new("ImageButton")
+lsc.Name = "LeaderstatsContainer"
+lsc.Size = UDim2.new(0, 0, 1, 0)
+lsc.AutoButtonColor = false
+lsc.Image = ""
+lsc.BackgroundTransparency = 1
+lsc.Parent = topbarbg
+
 -- world
 
 local function setnm(hum, plr)
@@ -1302,9 +1312,15 @@ local function initializeStatText(stat, statObject, entry, statFrame)
         entry.PrimaryStat = scoreValue
     end
     local statText = createStatText(statFrame, formatStatString(tostring(scoreValue)), false)
+    if entry.Player == Player then
+        stat.Text = statText.Text
+    end
     conn(statObject.Changed, function()
         local newScore = getScoreValue(statObject)
         statText.Text = formatStatString(tostring(newScore))
+        if entry.Player == Player then
+            stat.Text = statText.Text
+        end
         if GameStats[1] and statObject.Name == GameStats[1].Name then
             entry.PrimaryStat = newScore
         end
@@ -1362,6 +1378,7 @@ updateLeaderstatFrames = function()
     updateAllTeamScores()
     updatePrimaryStats()
     setEntryPositions()
+    if refreshLeaderstats then refreshLeaderstats() end
 end
 
 local isOpen = false
@@ -1402,5 +1419,51 @@ conn(game.ChildAdded, function(child)
         initializeTeams(child)
     end
 end)
+
+refreshLeaderstats = function()
+    for _, c in pairs(lsc:GetChildren()) do
+        c:Destroy()
+    end
+    local n = #GameStats
+    local w = n * (config.TopbarConstants.Stat_Entry_Size_X + config.TopbarConstants.Tile_Spacing)
+    for i, stat in ipairs(GameStats) do
+        local cw = config.TopbarConstants.Stat_Entry_Size_X + (i == n and 0 or config.TopbarConstants.Tile_Spacing)
+        local col = Instance.new("Frame")
+        col.Name = "Column" .. tostring(i)
+        col.Size = UDim2.new(0, cw, 1, 0)
+        col.Position = UDim2.new(0, config.TopbarConstants.Tile_Spacing + (config.TopbarConstants.Stat_Entry_Size_X + config.TopbarConstants.Tile_Spacing) * (i - 1), 0, 0)
+        col.BackgroundTransparency = 1
+        col.Parent = lsc
+        local cn = Instance.new("TextLabel")
+        cn.Name = "ColumnName"
+        cn.Text = stat.Name
+        cn.Size = UDim2.new(1, 0, 0, 10)
+        cn.Position = UDim2.new(0, 0, 0, 4)
+        cn.Font = Enum.Font.SourceSans
+        cn.FontSize = Enum.FontSize.Size14
+        cn.BackgroundTransparency = 1
+        cn.TextColor3 = config.TopbarConstants.NameHealth_Font_Color
+        cn.TextYAlignment = Enum.TextYAlignment.Center
+        cn.TextXAlignment = Enum.TextXAlignment.Center
+        cn.Parent = col
+        local cv = Instance.new("TextLabel")
+        cv.Name = "ColumnValue"
+        cv.Text = stat.Text
+        cv.Size = UDim2.new(1, 0, 0, 10)
+        cv.Position = UDim2.new(0, 0, 0, 19)
+        cv.Font = Enum.Font.SourceSansBold
+        cv.FontSize = Enum.FontSize.Size14
+        cv.BackgroundTransparency = 1
+        cv.TextColor3 = config.TopbarConstants.NameHealth_Font_Color
+        cv.TextYAlignment = Enum.TextYAlignment.Center
+        cv.TextXAlignment = Enum.TextXAlignment.Center
+        cv.Parent = col
+    end
+    lsc.Size = UDim2.new(0, w, 1, 0)
+    lsc.Position = UDim2.new(1, -w, 0, 0)
+    nhc.Position = UDim2.new(1, -(config.TopbarConstants.NameHealth_Width + w), 0, 0)
+end
+conn(lsc.MouseButton1Click, function() tog() end)
+refreshLeaderstats()
 
 -- thanks for using clientMid :3
