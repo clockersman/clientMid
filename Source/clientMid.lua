@@ -118,7 +118,7 @@ local config = {
         Friend_Icon = "rbxasset://textures/ui/icon_friends_16.png",
         Friend_Request_Icon = "rbxasset://textures/ui/icon_friendrequestsent_16.png",
         Friend_Received_Icon = "rbxasset://textures/ui/icon_friendrequestrecieved-16.png",
-        Icon_Admin = "config.Assets.Icon_Admin",
+        Icon_Admin = "rbxasset://textures/ui/icon_admin-16.png",
     }
 }
 
@@ -135,10 +135,35 @@ if not game:IsLoaded() then
 end
 local Player = Players.LocalPlayer or Players.LocalPlayerAdded:Wait()
 
+local G = (getgenv and getgenv()) or {}
+G.clientMidRun = (G.clientMidRun or 0) + 1
+local runId = G.clientMidRun
+if G.clientMidConns then
+    for _, c in ipairs(G.clientMidConns) do
+        pcall(function() c:Disconnect() end)
+    end
+end
+G.clientMidConns = {}
+pcall(function()
+    local old = CoreGui:FindFirstChild("CmGui")
+    if old then old:Destroy() end
+end)
+local function conn(sig, fn)
+    local c = sig:Connect(function(...)
+        if G.clientMidRun ~= runId then return end
+        fn(...)
+    end)
+    table.insert(G.clientMidConns, c)
+    return c
+end
+
 -- CoreGui deletion
 local function delcore(name)
     pcall(function()
-        local inst = CoreGui:FindFirstChild(name) or CoreGui:WaitForChild(name, 15)
+        local inst = CoreGui:FindFirstChild(name)
+        if not inst and runId == 1 then
+            inst = CoreGui:WaitForChild(name, 15)
+        end
         if inst then inst:Destroy() end
     end)
 end
@@ -256,14 +281,14 @@ local function onplr(plr)
     local function onchar(char)
         local hum = char:WaitForChild("Humanoid")
         setnm(hum, plr)
-        hum:GetPropertyChangedSignal("DisplayName"):Connect(function()
+        conn(hum:GetPropertyChangedSignal("DisplayName"), function()
             if config.UsernameOrDisplay == "Username" then
                 if hum.DisplayName ~= plr.Name then hum.DisplayName = plr.Name end
             else
                 if hum.DisplayName ~= plr.DisplayName then hum.DisplayName = plr.DisplayName end
             end
         end)
-        hum:GetPropertyChangedSignal("HealthDisplayType"):Connect(function()
+        conn(hum:GetPropertyChangedSignal("HealthDisplayType"), function()
             if config.ShowHealthBar then
                 if hum.HealthDisplayType ~= Enum.HumanoidHealthDisplayType.AlwaysOn then
                     hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOn
@@ -275,14 +300,14 @@ local function onplr(plr)
             end
         end)
     end
-    plr.CharacterAdded:Connect(onchar)
+    conn(plr.CharacterAdded, onchar)
     if plr.Character then onchar(plr.Character) end
 end
 
 for _, plr in ipairs(Players:GetPlayers()) do
     onplr(plr)
 end
-Players.PlayerAdded:Connect(onplr)
+conn(Players.PlayerAdded, onplr)
 
 -- playerlist
 
@@ -711,13 +736,13 @@ local function onStatRemoved(oldStat, entry)
 end
 
 local function onStatAdded(leaderstats, entry)
-    leaderstats.ChildAdded:Connect(function(newStat)
+    conn(leaderstats.ChildAdded, function(newStat)
         if isValidStat(newStat) then
             addNewStats(newStat.Parent)
             updateLeaderstatFrames()
         end
     end)
-    leaderstats.ChildRemoved:Connect(function(child)
+    conn(leaderstats.ChildRemoved, function(child)
         onStatRemoved(child, entry)
     end)
     addNewStats(leaderstats)
@@ -730,24 +755,24 @@ local function setLeaderStats(entry)
     if leaderstats then
         onStatAdded(leaderstats, entry)
     end
-    player.ChildAdded:Connect(function(child)
+    conn(player.ChildAdded, function(child)
         if child.Name == "leaderstats" then
             onStatAdded(child, entry)
         end
-        child.Changed:Connect(function(property)
+        conn(child.Changed, function(property)
             if property == "Name" and child.Name == "leaderstats" then
                 onStatAdded(child, entry)
             end
         end)
     end)
     for _, child in pairs(player:GetChildren()) do
-        child.Changed:Connect(function(property)
+        conn(child.Changed, function(property)
             if property == "Name" and child.Name == "leaderstats" then
                 onStatAdded(child, entry)
             end
         end)
     end
-    player.ChildRemoved:Connect(function(child)
+    conn(player.ChildRemoved, function(child)
         if child.Name == "leaderstats" then
             for _, stat in ipairs(child:GetChildren()) do
                 onStatRemoved(stat, entry)
@@ -810,7 +835,7 @@ local function mkpop(player, y)
         b.TextStrokeTransparency = config.TopbarConstants.Text_Stroke_Transparency
         b.TextStrokeColor3 = config.TopbarConstants.Text_Stroke_Color
         b.Parent = f
-        b.MouseButton1Click:Connect(function()
+        conn(b.MouseButton1Click, function()
             pcall(press)
             hidepop()
         end)
@@ -886,11 +911,11 @@ local function createPlayerEntry(player)
         local function updnm()
             playerName.Text = getplname(player)
         end
-        player:GetPropertyChangedSignal("DisplayName"):Connect(updnm)
-        player:GetPropertyChangedSignal("Name"):Connect(updnm)
+        conn(player:GetPropertyChangedSignal("DisplayName"), updnm)
+        conn(player:GetPropertyChangedSignal("Name"), updnm)
     end)
 
-    player.Changed:Connect(function(property)
+    conn(player.Changed, function(property)
         if #TeamEntries > 0 and (property == "Neutral" or property == "TeamColor") then
             setScrollListSize()
         end
@@ -902,7 +927,7 @@ local function createPlayerEntry(player)
         if ficon then updateSocialIcon(ficon, entryFrame) end
     end)
 
-    entryFrame.MouseButton1Click:Connect(function() sel(containerFrame, player) end)
+    conn(entryFrame.MouseButton1Click, function() sel(containerFrame, player) end)
 
     playerEntry.Player = player
     playerEntry.Frame = containerFrame
@@ -934,7 +959,7 @@ local function createTeamEntry(team)
     local teamName = createEntryNameText("TeamName", team.Name, entryFrame.AbsoluteSize.x, 1)
     teamName.Parent = entryFrame
     teamEntry.Frame = containerFrame
-    team.Changed:Connect(function(property)
+    conn(team.Changed, function(property)
         if property == "Name" then
             teamName.Text = team.Name
         elseif property == "TeamColor" then
@@ -1001,12 +1026,12 @@ local function initializeTeams(teams)
     for _, team in pairs(teams:GetTeams()) do
         onTeamAdded(team)
     end
-    teams.ChildAdded:Connect(function(team)
+    conn(teams.ChildAdded, function(team)
         if team:IsA("Team") then
             onTeamAdded(team)
         end
     end)
-    teams.ChildRemoved:Connect(function(team)
+    conn(teams.ChildRemoved, function(team)
         if team:IsA("Team") then
             onTeamRemoved(team)
         end
@@ -1118,7 +1143,7 @@ local function initializeStatText(stat, statObject, entry, statFrame)
         entry.PrimaryStat = scoreValue
     end
     local statText = createStatText(statFrame, formatStatString(tostring(scoreValue)), false)
-    statObject.Changed:Connect(function()
+    conn(statObject.Changed, function()
         local newScore = getScoreValue(statObject)
         statText.Text = formatStatString(tostring(newScore))
         if GameStats[1] and statObject.Name == GameStats[1].Name then
@@ -1191,11 +1216,11 @@ local function tog()
     if not isOpen then hidepop() end
 end
 
-uis.InputBegan:Connect(function(inp)
+conn(uis.InputBegan, function(inp)
     if inp.KeyCode == Enum.KeyCode.Tab then tog() end
 end)
 
-uis.InputBegan:Connect(function(inp, gpe)
+conn(uis.InputBegan, function(inp, gpe)
     if gpe then return end
     if inp.UserInputType == Enum.UserInputType.MouseButton1 or
        (inp.UserInputType == Enum.UserInputType.Touch and inp.UserInputState == Enum.UserInputState.Begin) then
@@ -1206,13 +1231,13 @@ end)
 for _, plr in ipairs(Players:GetPlayers()) do
     createPlayerEntry(plr)
 end
-Players.PlayerAdded:Connect(createPlayerEntry)
-Players.PlayerRemoving:Connect(removePlayerEntry)
+conn(Players.PlayerAdded, createPlayerEntry)
+conn(Players.PlayerRemoving, removePlayerEntry)
 
 if TeamsService then
     initializeTeams(TeamsService)
 end
-game.ChildAdded:Connect(function(child)
+conn(game.ChildAdded, function(child)
     if child:IsA("Teams") then
         initializeTeams(child)
     end
