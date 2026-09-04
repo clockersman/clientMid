@@ -278,6 +278,7 @@ local hov = Instance.new("ImageLabel")
 
 nhc.Name = "NameHealthContainer"
 nhc.Size = UDim2.new(0, config.TopbarConstants.NameHealth_Width, 1, 0)
+nhc.Position = UDim2.new(1, -config.TopbarConstants.NameHealth_Width, 0, 0)
 nhc.AutoButtonColor = false
 nhc.Image = ""
 nhc.BackgroundTransparency = 1
@@ -1373,6 +1374,7 @@ local function tog()
     setVisible(isOpen)
     if not isOpen then hidepop() end
 end
+conn(nhc.MouseButton1Click, function() tog() end)
 
 conn(uis.InputBegan, function(inp)
     if inp.KeyCode == Enum.KeyCode.Tab then tog() end
