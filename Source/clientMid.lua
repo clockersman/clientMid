@@ -46,6 +46,15 @@ local config = {
         Team_Entry_Size_Y = 18,
         Name_Entry_Size_X = 170,
         Stat_Entry_Size_X = 75,
+
+        -- namehealth
+        NameHealth_Width = 170,
+        NameHealth_Font_Color = Color3.fromRGB(255, 255, 255),
+        Health_Bg_Color = Color3.fromRGB(228, 236, 246),
+        Health_Red = Color3.fromRGB(255, 28, 0),
+        Health_Yellow = Color3.fromRGB(250, 235, 0),
+        Health_Green = Color3.fromRGB(27, 252, 107),
+        Health_Overlay_Threshold = 0.05,
     },
 
     -- HELP! what to do here? add a disable!
@@ -86,6 +95,7 @@ local config = {
 
 	MessageCounter = "rbxassetid://71605582053442",
 	MessageCounter_2x = "rbxassetid://126873557618054",
+	Hurt_Overlay = "rbxassetid://34854607",
 
 	-- mobile
 
@@ -259,6 +269,154 @@ local function setgi()
     end)
 end
 setgi()
+
+local nhc = Instance.new("ImageButton")
+local nm = Instance.new("TextLabel")
+local hc = Instance.new("Frame")
+local hf = Instance.new("Frame")
+local hov = Instance.new("ImageLabel")
+
+nhc.Name = "NameHealthContainer"
+nhc.Size = UDim2.new(0, config.TopbarConstants.NameHealth_Width, 1, 0)
+nhc.AutoButtonColor = false
+nhc.Image = ""
+nhc.BackgroundTransparency = 1
+nhc.Parent = topbarbg
+
+local function nmtext()
+    if config.UsernameOrDisplay == "Username" then return Player.Name end
+    return Player.DisplayName
+end
+
+nm.Name = "Username"
+nm.Size = UDim2.new(1, -14, 0, 22)
+nm.Position = UDim2.new(0, 7, 0, 0)
+nm.Font = Enum.Font.SourceSansBold
+nm.FontSize = Enum.FontSize.Size14
+nm.BackgroundTransparency = 1
+nm.TextColor3 = config.TopbarConstants.NameHealth_Font_Color
+nm.TextYAlignment = Enum.TextYAlignment.Bottom
+nm.TextXAlignment = Enum.TextXAlignment.Left
+nm.Text = nmtext()
+nm.Parent = nhc
+
+conn(Player:GetPropertyChangedSignal("DisplayName"), function() nm.Text = nmtext() end)
+conn(Player:GetPropertyChangedSignal("Name"), function() nm.Text = nmtext() end)
+
+hc.Name = "HealthContainer"
+hc.Size = UDim2.new(1, -14, 0, 3)
+hc.Position = UDim2.new(0, 7, 1, -9)
+hc.BorderSizePixel = 0
+hc.BackgroundColor3 = config.TopbarConstants.Health_Bg_Color
+hc.Parent = nhc
+
+hf.Name = "HealthFill"
+hf.Size = UDim2.new(1, 0, 1, 0)
+hf.BorderSizePixel = 0
+hf.BackgroundColor3 = config.TopbarConstants.Health_Green
+hf.Parent = hc
+
+hov.Name = "HurtOverlay"
+hov.BackgroundTransparency = 1
+hov.Image = config.Assets.Hurt_Overlay
+hov.Position = UDim2.new(-10, 0, -10, 0)
+hov.Size = UDim2.new(20, 0, 20, 0)
+hov.Visible = false
+hov.Parent = screenGui
+
+local function hclr(p)
+    local loC = config.TopbarConstants.Health_Red
+    local hiC = config.TopbarConstants.Health_Green
+    if p < 0.1 then return loC end
+    if p > 0.8 then return hiC end
+    local num = Vector3.new(0, 0, 0)
+    local den = 0
+    local smp = {
+        {c = loC, s = 0.1},
+        {c = config.TopbarConstants.Health_Yellow, s = 0.5},
+        {c = hiC, s = 0.8},
+    }
+    for _, sm in ipairs(smp) do
+        local d = p - sm.s
+        if d == 0 then return sm.c end
+        local w = 1 / (d * d)
+        num = num + w * Vector3.new(sm.c.r, sm.c.g, sm.c.b)
+        den = den + w
+    end
+    local r = num / den
+    return Color3.new(r.x, r.y, r.z)
+end
+
+local function hovgo()
+    local ns = UDim2.new(20, 0, 20, 0)
+    local np = UDim2.new(-10, 0, -10, 0)
+    if hov:IsDescendantOf(game) then
+        hov:TweenSizeAndPosition(ns, np, Enum.EasingDirection.Out, Enum.EasingStyle.Linear, 0, true, function()
+            hov.Size = UDim2.new(1, 0, 1, 0)
+            hov.Position = UDim2.new(0, 0, 0, 0)
+            hov.Visible = true
+            if hov:IsDescendantOf(game) then
+                hov:TweenSizeAndPosition(ns, np, Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 10, false, function()
+                    hov.Visible = false
+                end)
+            else
+                hov.Size = ns
+                hov.Position = np
+            end
+        end)
+    else
+        hov.Size = ns
+        hov.Position = np
+    end
+end
+
+local function onhum(h)
+    local last = h.Health
+    local function onhp(health)
+        if not h.Parent then return end
+        local delta = last - health
+        local p = health / h.MaxHealth
+        if h.MaxHealth <= 0 then p = 0 end
+        p = math.max(0, math.min(1, p))
+        hf.Size = UDim2.new(p, 0, 1, 0)
+        hf.BackgroundColor3 = hclr(p)
+        local healthCore = pcall(function() return game.StarterGui:GetCoreGuiEnabled("Health") end)
+        if delta >= h.MaxHealth * config.TopbarConstants.Health_Overlay_Threshold and health ~= h.MaxHealth and healthCore then
+            hovgo()
+        end
+        last = health
+    end
+    conn(h.HealthChanged, onhp)
+    onhp(last)
+end
+
+local function onnhchar(char)
+    local h = char:WaitForChild("Humanoid")
+    onhum(h)
+    local function reswap()
+        local nh = char:FindFirstChildOfClass("Humanoid")
+        if nh and nh ~= h then
+            h = nh
+            onhum(nh)
+        end
+    end
+    conn(char.ChildAdded, reswap)
+    conn(char.ChildRemoved, reswap)
+end
+conn(Player.CharacterAdded, onnhchar)
+if Player.Character then onnhchar(Player.Character) end
+
+local he = not dis("Health")
+local ne = not dis("Name")
+hc.Visible = he
+nm.Visible = ne
+if he then
+    nm.Size = UDim2.new(1, -14, 0, 22)
+    nm.TextYAlignment = Enum.TextYAlignment.Bottom
+else
+    nm.Size = UDim2.new(1, -14, 1, 0)
+    nm.TextYAlignment = Enum.TextYAlignment.Center
+end
 
 -- world
 
