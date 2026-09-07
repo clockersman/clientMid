@@ -55,12 +55,26 @@ local config = {
         Health_Yellow = Color3.fromRGB(250, 235, 0),
         Health_Green = Color3.fromRGB(27, 252, 107),
         Health_Overlay_Threshold = 0.05,
+
+        -- settingshub
+        SettingsShield_Color = Color3.fromRGB(41, 41, 41),
+        SettingsShield_Transparency = 0.2,
+        HubBar_Width = 800,
+        HubBar_Height = 60,
+        HubBar_Y = 0,
+        HubBar_Top_Pad = 6,
     },
 
-    -- HELP! what to do here? add a disable!
-    -- "Menu", "Chat", "Backpack", "Healht", "Name", "Settings"
-    -- put the names you want disabled in the list below, e.g. "Chat", "Health"
+    -- put the names you want disabled in the list below, e.g. "Chat", "Health" :3
+    -- NOTE: they must be quoted strings like "Chat" (not bare Chat), and case matters (PlayerList!)
+    -- Available: "Menu", "Chat", "Backpack", "Health", "Name", "PlayerList", "Topbar_Bg"
     TopbarDisabled = {
+    },
+
+    -- toggle chat in hotkey
+    ChatToggle = {
+        Enabled = true,
+        KeyCode = Enum.KeyCode.C,
     },
     
     -- playerlist 
@@ -76,6 +90,9 @@ local config = {
     
     UsernameOrDisplay = "Username",
     ShowHealthBar = true,
+
+    -- Chat
+    ChatTeamIndicator = false,
 
     Assets = {
 	-- topbar
@@ -95,7 +112,27 @@ local config = {
 
 	MessageCounter = "rbxassetid://71605582053442",
 	MessageCounter_2x = "rbxassetid://126873557618054",
-	Hurt_Overlay = "rbxassetid://34854607",
+		Hurt_Overlay = "rbxassetid://34854607",
+		HubBar_Bg = "rbxasset://textures/ui/Settings/MenuBarAssets/MenuBackground.png",
+		HubBar_TabSelection = "rbxasset://textures/ui/Settings/MenuBarAssets/MenuSelection.png",
+		Menu_Button = "rbxasset://textures/ui/Settings/MenuBarAssets/MenuButton.png",
+		Menu_Button_Selected = "rbxasset://textures/ui/Settings/MenuBarAssets/MenuButtonSelected.png",
+		Plugins_Icon = "rbxassetid://135302421041374",
+		PlayersTab_Icon = "rbxasset://textures/ui/Settings/MenuBarIcons/PlayersTabIcon.png",
+		GameSettingsTab_Icon = "rbxasset://textures/ui/Settings/MenuBarIcons/GameSettingsTab.png",
+		ReportAbuseTab_Icon = "rbxasset://textures/ui/Settings/MenuBarIcons/ReportAbuseTab.png",
+		HelpTab_Icon = "rbxasset://textures/ui/Settings/MenuBarIcons/HelpTab.png",
+		RecordTab_Icon = "rbxasset://textures/ui/Settings/MenuBarIcons/RecordTab.png",
+		Dialog_White = "rbxasset://textures/ui/dialog_white.png",
+		Leave_Icon = "rbxasset://textures/ui/Settings/Help/LeaveIcon.png",
+		Reset_Icon = "rbxasset://textures/ui/Settings/Help/ResetIcon.png",
+		Resume_Icon = "rbxasset://textures/ui/Settings/Help/EscapeIcon.png",
+	ChatIcon = "rbxasset://textures/ui/Chat/Chat.png",
+	ChatIcon_Down = "rbxasset://textures/ui/Chat/ChatDown.png",
+
+	ChatGear = "rbxassetid://86722145007462",
+	ChatResizeCursor = "rbxassetid://90033267536542",
+
 
 	-- mobile
 
@@ -129,6 +166,12 @@ local config = {
         Friend_Request_Icon = "rbxasset://textures/ui/icon_friendrequestsent_16.png",
         Friend_Received_Icon = "rbxasset://textures/ui/icon_friendrequestrecieved-16.png",
         Icon_Admin = "rbxasset://textures/ui/icon_admin-16.png",
+
+        -- chat
+        Chat_TeamButton = "rbxasset://textures/ui/chat_teamButton.png",
+        Scroll_Bottom_Image = "rbxasset://textures/ui/scroll-bottom.png",
+        Scroll_Middle_Image = "rbxasset://textures/ui/scroll-middle.png",
+        Scroll_Top_Image = "rbxasset://textures/ui/scroll-top.png",
     }
 }
 
@@ -139,11 +182,7 @@ local config = {
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local GuiService = game:GetService("GuiService")
-
-if not game:IsLoaded() then
-    game.Loaded:Wait()
-end
-local Player = Players.LocalPlayer or Players.LocalPlayerAdded:Wait()
+local RunService = game:GetService("RunService")
 
 local G = (getgenv and getgenv()) or {}
 G.clientMidRun = (G.clientMidRun or 0) + 1
@@ -159,6 +198,9 @@ pcall(function()
     if old then old:Destroy() end
 end)
 local function conn(sig, fn)
+    if G.clientMidRun ~= runId then
+        return {Disconnect = function() end}
+    end
     local c = sig:Connect(function(...)
         if G.clientMidRun ~= runId then return end
         fn(...)
@@ -167,19 +209,28 @@ local function conn(sig, fn)
     return c
 end
 
--- CoreGui deletion
-local function delcore(name)
-    pcall(function()
-        local inst = CoreGui:FindFirstChild(name)
-        if not inst and runId == 1 then
-            inst = CoreGui:WaitForChild(name, 15)
-        end
-        if inst then inst:Destroy() end
-    end)
+if not game:IsLoaded() then
+    game.Loaded:Wait()
 end
-delcore("TopBarApp")
-delcore("ExperienceChat")
-delcore("PlayerList")
+if G.clientMidRun ~= runId then return end
+local Player = Players.LocalPlayer or Players.LocalPlayerAdded:Wait()
+if G.clientMidRun ~= runId then return end
+
+-- CoreGui deletion
+local delnames = {TopBarApp = true, ExperienceChat = true, PlayerList = true}
+local function delcore(inst)
+    pcall(function() inst:Destroy() end)
+end
+for name in pairs(delnames) do
+    local inst = CoreGui:FindFirstChild(name)
+    if inst then delcore(inst) end
+end
+conn(CoreGui.ChildAdded, function(child)
+    if delnames[child.Name] then delcore(child) end
+end)
+pcall(function()
+    game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+end)
 
 -- folders
 
@@ -393,6 +444,7 @@ end
 
 local function onnhchar(char)
     local h = char:WaitForChild("Humanoid")
+    if G.clientMidRun ~= runId then return end
     onhum(h)
     local function reswap()
         local nh = char:FindFirstChildOfClass("Humanoid")
@@ -449,6 +501,7 @@ end
 local function onplr(plr)
     local function onchar(char)
         local hum = char:WaitForChild("Humanoid")
+        if G.clientMidRun ~= runId then return end
         setnm(hum, plr)
         conn(hum:GetPropertyChangedSignal("DisplayName"), function()
             if config.UsernameOrDisplay == "Username" then
@@ -488,7 +541,7 @@ Container.Name = "PlayerListContainer"
 Container.Position = UDim2.new(1, -172, 0, 38)
 Container.Size = UDim2.new(0, 170, 0.5, 0)
 Container.BackgroundTransparency = 1
-Container.Visible = false
+Container.Visible = not dis("PlayerList")
 Container.Parent = screenGui
 
 local noSelectionObject = Instance.new("Frame")
@@ -984,7 +1037,7 @@ local function mkpop(player, y)
 
     local f = Instance.new("Frame")
     f.Name = "PopupFrame"
-    f.Size = UDim2.new(1, 0, 0, 24 * 3 + 2)
+    f.Size = UDim2.new(1, 0, 0, (24 * 3) + (3 - 2))
     f.Position = UDim2.new(1, 1, 0, y)
     f.BackgroundTransparency = 1
     f.Parent = clip
@@ -997,6 +1050,7 @@ local function mkpop(player, y)
         b.BackgroundTransparency = config.TopbarConstants.Bg_Transparency
         b.BackgroundColor3 = config.TopbarConstants.Bg_Color
         b.BorderSizePixel = 0
+        b.AutoButtonColor = true
         b.Text = text
         b.Font = Enum.Font.SourceSans
         b.FontSize = Enum.FontSize.Size14
@@ -1064,12 +1118,19 @@ local function createPlayerEntry(player)
     end
 
     pcall(function()
+        local owner = false
+        if game.CreatorType == Enum.CreatorType.Group then
+            owner = player:GetRankInGroup(game.CreatorId) == 255
+        else
+            owner = player.UserId == game.CreatorId
+        end
+        if owner then
+            if not membershipIcon then membershipIcon = createImageIcon(PLACE_OWNER_ICON, "MembershipIcon", 1, entryFrame)
+            else membershipIcon.Image = PLACE_OWNER_ICON end
+        end
         if player:IsInGroup(ADMIN_GROUP) then
             if not membershipIcon then membershipIcon = createImageIcon(config.Assets.Icon_Admin, "MembershipIcon", 1, entryFrame)
             else membershipIcon.Image = config.Assets.Icon_Admin end
-        elseif player.UserId == game.CreatorId and game.CreatorType == Enum.CreatorType.User then
-            if not membershipIcon then membershipIcon = createImageIcon(PLACE_OWNER_ICON, "MembershipIcon", 1, entryFrame)
-            else membershipIcon.Image = PLACE_OWNER_ICON end
         end
     end)
 
@@ -1381,19 +1442,20 @@ updateLeaderstatFrames = function()
     if refreshLeaderstats then refreshLeaderstats() end
 end
 
-local isOpen = false
+local isOpen = true
 local function setVisible(state)
     Container.Visible = state
 end
 local function tog()
-    if dis("Name") or dis("PlayerList") then return end
+    if dis("PlayerList") then return end
     isOpen = not isOpen
     setVisible(isOpen)
     if not isOpen then hidepop() end
 end
 conn(nhc.MouseButton1Click, function() tog() end)
 
-conn(uis.InputBegan, function(inp)
+conn(uis.InputBegan, function(inp, gpe)
+    if gpe then return end
     if inp.KeyCode == Enum.KeyCode.Tab then tog() end
 end)
 
@@ -1465,5 +1527,4219 @@ refreshLeaderstats = function()
 end
 conn(lsc.MouseButton1Click, function() tog() end)
 refreshLeaderstats()
+
+local shieldclip = Instance.new("Frame")
+shieldclip.Name = "SettingsShield"
+shieldclip.Size = UDim2.new(1, 0, 1, -36)
+shieldclip.Position = UDim2.new(0, 0, 0, 36)
+shieldclip.BorderSizePixel = 0
+shieldclip.ClipsDescendants = true
+shieldclip.BackgroundTransparency = 1
+shieldclip.Visible = true
+shieldclip.ZIndex = 10
+shieldclip.Parent = screenGui
+
+local shield = Instance.new("Frame")
+shield.Name = "SettingsShield"
+shield.Size = UDim2.new(1, 0, 1, 0)
+shield.Position = UDim2.new(0, 0, -1, -36)
+shield.BackgroundTransparency = config.TopbarConstants.SettingsShield_Transparency
+shield.BackgroundColor3 = config.TopbarConstants.SettingsShield_Color
+shield.BorderSizePixel = 0
+shield.Visible = false
+shield.Active = true
+shield.ZIndex = 1
+shield.Parent = shieldclip
+
+local modal = Instance.new("TextButton")
+modal.Name = "Modal"
+modal.BackgroundTransparency = 1
+modal.Position = UDim2.new(0, 0, 1, -1)
+modal.Size = UDim2.new(1, 0, 1, 0)
+modal.Modal = true
+modal.Text = ""
+modal.Parent = shield
+
+local BAR_HEIGHT = 60
+local BASE_BAR_WIDTH = 800
+local hubbar = Instance.new("ImageLabel")
+hubbar.Name = "HubBar"
+hubbar.ZIndex = 2
+hubbar.BorderSizePixel = 0
+hubbar.BackgroundTransparency = 1
+hubbar.BackgroundColor3 = Color3.new(78 / 255, 84 / 255, 96 / 255)
+hubbar.Image = config.Assets.HubBar_Bg
+hubbar.ScaleType = Enum.ScaleType.Slice
+hubbar.SliceCenter = Rect.new(4, 4, 6, 6)
+hubbar.Size = UDim2.new(0, BASE_BAR_WIDTH, 0, BAR_HEIGHT)
+hubbar.Position = UDim2.new(0.5, -BASE_BAR_WIDTH / 2, 0.05, 0)
+hubbar.Parent = shield
+
+local pvc = Instance.new("Frame")
+pvc.Name = "PageViewClipper"
+pvc.BackgroundTransparency = 1
+pvc.Size = UDim2.new(hubbar.Size.X.Scale, hubbar.Size.X.Offset, 1, -(hubbar.Position.Y.Offset + hubbar.Size.Y.Offset + 1))
+pvc.Position = UDim2.new(hubbar.Position.X.Scale, hubbar.Position.X.Offset, hubbar.Position.Y.Scale, hubbar.Position.Y.Offset + hubbar.Size.Y.Offset + 1)
+pvc.ClipsDescendants = true
+pvc.Parent = shield
+
+local inc = Instance.new("ImageButton")
+inc.Name = "InputCapture"
+inc.BackgroundTransparency = 1
+inc.Size = UDim2.new(1, 0, 1, 0)
+inc.Image = ""
+inc.Parent = pvc
+
+local pv = Instance.new("ScrollingFrame")
+pv.Name = "PageView"
+pv.Size = UDim2.new(1, 0, 1, 0)
+pv.ZIndex = 1
+pv.BackgroundTransparency = 1
+pv.BorderSizePixel = 0
+pv.ScrollBarThickness = 6
+pv.Selectable = false
+pv.Parent = pvc
+
+botbar = Instance.new("Frame")
+botbar.Name = "BottomButtonFrame"
+botbar.Size = hubbar.Size
+botbar.Position = UDim2.new(0.5, -BASE_BAR_WIDTH / 2, 0.9, -BAR_HEIGHT)
+botbar.BackgroundTransparency = 1
+botbar.ZIndex = 2
+botbar.Parent = shield
+
+local hamb = Instance.new("ImageButton")
+hamb.Name = "Settings"
+hamb.Size = UDim2.new(0, 50, 0, 36)
+hamb.Position = UDim2.new(0, 0, 0, 0)
+hamb.Image = ""
+hamb.AutoButtonColor = false
+hamb.BackgroundTransparency = 1
+hamb.Visible = not dis("Menu")
+hamb.Parent = topbarbg
+
+local hamicon = Instance.new("ImageLabel")
+hamicon.Name = "SettingsIcon"
+hamicon.Size = UDim2.new(0, 32, 0, 25)
+hamicon.Position = UDim2.new(0.5, -16, 0.5, -12)
+hamicon.BackgroundTransparency = 1
+hamicon.Image = config.Assets.Hamburger
+hamicon.Parent = hamb
+
+local topbarIcons = {}
+
+local function layoutTopbarIcons()
+    local x = 0
+    for _, b in ipairs(topbarIcons) do
+        if b.Visible then
+            b.Position = UDim2.new(0, x, 0, 0)
+            x = x + b.Size.X.Offset
+        end
+    end
+end
+
+topbarIcons[#topbarIcons + 1] = hamb
+
+local chatIconButton = Instance.new("ImageButton")
+chatIconButton.Name = "Chat"
+chatIconButton.Size = UDim2.new(0, 50, 0, 36)
+chatIconButton.Position = UDim2.new(0, 0, 0, 0)
+chatIconButton.Image = ""
+chatIconButton.AutoButtonColor = false
+chatIconButton.BackgroundTransparency = 1
+chatIconButton.Visible = not dis("Chat")
+chatIconButton.Parent = topbarbg
+
+local chatIconImage = Instance.new("ImageLabel")
+chatIconImage.Name = "ChatIcon"
+chatIconImage.Size = UDim2.new(0, 28, 0, 27)
+chatIconImage.Position = UDim2.new(0.5, -14, 0.5, -13)
+chatIconImage.BackgroundTransparency = 1
+chatIconImage.Image = config.Assets.ChatIcon
+chatIconImage.Parent = chatIconButton
+
+topbarIcons[#topbarIcons + 1] = chatIconButton
+
+G.clientMid = G.clientMid or {}
+G.clientMid.Chat = G.clientMid.Chat or {}
+
+local function updateIcon(down)
+    if down then
+        chatIconImage.Image = config.Assets.ChatIcon_Down
+    else
+        chatIconImage.Image = config.Assets.ChatIcon
+    end
+end
+
+G.clientMid.Chat.setOpen = updateIcon
+
+local function toggleChat()
+    local chat = G.clientMid and G.clientMid.Chat
+    if not chat or type(chat.toggle) ~= "function" then
+        warn("clientMid: Chat.toggle is not initialized")
+        return
+    end
+    local ok, err = pcall(chat.toggle)
+    if not ok then
+        warn("clientMid: Chat toggle error: " .. tostring(err))
+    end
+end
+
+chatIconButton.Active = true
+conn(chatIconButton.Activated, toggleChat)
+
+updateIcon(false)
+layoutTopbarIcons()
+
+local backpackIconButton = Instance.new("ImageButton")
+backpackIconButton.Name = "Backpack"
+backpackIconButton.Size = UDim2.new(0, 50, 0, 36)
+backpackIconButton.Position = UDim2.new(0, 0, 0, 0)
+backpackIconButton.Image = ""
+backpackIconButton.AutoButtonColor = false
+backpackIconButton.BackgroundTransparency = 1
+backpackIconButton.Visible = not dis("Backpack")
+backpackIconButton.Parent = topbarbg
+
+local backpackIconImage = Instance.new("ImageLabel")
+backpackIconImage.Name = "BackpackIcon"
+backpackIconImage.Size = UDim2.new(0, 22, 0, 28)
+backpackIconImage.Position = UDim2.new(0.5, -11, 0.5, -14)
+backpackIconImage.BackgroundTransparency = 1
+backpackIconImage.Image = config.Assets.Backpack
+backpackIconImage.Parent = backpackIconButton
+
+topbarIcons[#topbarIcons + 1] = backpackIconButton
+
+G.clientMid.Backpack = G.clientMid.Backpack or {}
+G.clientMid.Backpack.StateChanged = Instance.new("BindableEvent")
+G.clientMid.Backpack.IsOpen = false
+
+local function backpackIconState(open)
+    if open then
+        backpackIconImage.Image = config.Assets.Backpack_Down
+    else
+        backpackIconImage.Image = config.Assets.Backpack
+    end
+end
+
+conn(G.clientMid.Backpack.StateChanged.Event, function(open)
+    backpackIconState(open)
+end)
+
+backpackIconButton.Active = true
+conn(backpackIconButton.Activated, function()
+    local bp = G.clientMid and G.clientMid.Backpack
+    if bp and type(bp.OpenClose) == "function" then
+        bp.OpenClose()
+    end
+end)
+
+layoutTopbarIcons()
+
+local pages = {}
+local tabheaders = {}
+local curpage = nil
+local hubopen = false
+local menustack = {}
+local switchpage
+
+local hubHiddenTargets = {}
+local hubPrevState = {}
+local function registerHubHidden(f)
+    if f then table.insert(hubHiddenTargets, f) end
+end
+
+local function setzindex(o, z)
+    if o:IsA("GuiObject") then
+        o.ZIndex = z
+        for _, c in pairs(o:GetChildren()) do setzindex(c, z) end
+    end
+end
+
+local function mkpage(name, icon)
+    local pg = {}
+    pg.TabPosition = 0
+    pg.Displayed = Instance.new("BindableEvent")
+    pg.Displayed.Name = "Displayed"
+    pg.Hidden = Instance.new("BindableEvent")
+    pg.Hidden.Name = "Hidden"
+    pg.HideChrome = false
+    local header = Instance.new("TextButton")
+    header.Name = "Header"
+    header.Text = ""
+    header.BackgroundTransparency = 1
+    header.Size = UDim2.new(0, 169, 1, 0)
+    header.Position = UDim2.new(0.5, 0, 0, 0)
+    local ic = Instance.new("ImageLabel")
+    ic.Name = "Icon"
+    ic.BackgroundTransparency = 1
+    ic.Size = UDim2.new(0, 44, 0, 37)
+    ic.Position = UDim2.new(0, 10, 0.5, -18)
+    ic.Image = icon or ""
+    ic.ImageTransparency = 0.5
+    ic.Parent = header
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Text = name
+    title.Font = Enum.Font.SourceSansBold
+    title.FontSize = Enum.FontSize.Size24
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(1.05, 0, 1, 0)
+    title.Position = UDim2.new(1.2, 0, 0, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextTransparency = 0.5
+    title.Parent = ic
+    local tsel = Instance.new("ImageLabel")
+    tsel.Name = "TabSelection"
+    tsel.Image = config.Assets.HubBar_TabSelection
+    tsel.ScaleType = Enum.ScaleType.Slice
+    tsel.SliceCenter = Rect.new(3, 1, 4, 5)
+    tsel.Visible = false
+    tsel.BackgroundColor3 = Color3.new(1, 1, 1)
+    tsel.BackgroundTransparency = 0
+    tsel.Size = UDim2.new(1, 0, 0, 6)
+    tsel.Position = UDim2.new(0, 0, 1, -6)
+    local tselcorner = Instance.new("UICorner")
+    tselcorner.CornerRadius = UDim.new(0, 1)
+    tselcorner.Parent = tsel
+    tsel.Parent = header
+    local page = Instance.new("Frame")
+    page.Name = "Page"
+    page.BackgroundTransparency = 1
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.Visible = false
+    pg.TabHeader = header
+    pg.Page = page
+    pg.Icon = ic
+    pg.Title = title
+    pg.TabSelection = tsel
+    pg.Height = 400
+    conn(header.MouseButton1Click, function() switchpage(pg) end)
+    return pg
+end
+
+local function resizeHubBar()
+    local totalWidth = 0
+    for i = 1, #tabheaders do
+        totalWidth = totalWidth + tabheaders[i].Size.X.Offset
+    end
+    local barWidth = math.max(BASE_BAR_WIDTH, totalWidth)
+    hubbar.Size = UDim2.new(0, barWidth, 0, BAR_HEIGHT)
+    hubbar.Position = UDim2.new(0.5, -barWidth / 2, 0.05, 0)
+    pvc.Size = UDim2.new(0, barWidth, botbar.Position.Y.Scale - hubbar.Position.Y.Scale, -(hubbar.Size.Y.Offset + BAR_HEIGHT + 1))
+    pvc.Position = UDim2.new(0.5, -barWidth / 2, hubbar.Position.Y.Scale, hubbar.Position.Y.Offset + hubbar.Size.Y.Offset + 1)
+    botbar.Size = UDim2.new(0, barWidth, 0, BAR_HEIGHT)
+    botbar.Position = UDim2.new(0.5, -barWidth / 2, 0.9, -BAR_HEIGHT)
+    local btns = {}
+    for _, c in pairs(botbar:GetChildren()) do
+        if c:IsA("GuiObject") and c.Name:find("Button$") then
+            btns[#btns + 1] = c
+        end
+    end
+    if #btns > 0 then
+        local spacing = barWidth / (#btns)
+        local bw = math.min(260, spacing - 16)
+        for i, b in ipairs(btns) do
+            b.Size = UDim2.new(0, bw, 0, 70)
+            b.Position = UDim2.new(0, spacing * (i - 1) + (spacing - bw) / 2, 0.5, -BAR_HEIGHT / 2)
+        end
+    end
+    for i = 1, #tabheaders do
+        local tab = tabheaders[i]
+        local scale = 1 / #tabheaders
+        local pos = ((scale * i) - (scale * (i - 1))) / 2 + (scale * (i - 1))
+        tab.Position = UDim2.new(pos, -tab.Size.X.Offset / 2, 0, 0)
+    end
+end
+
+local function addheader(newheader, headerpage)
+    tabheaders[#tabheaders + 1] = newheader
+    headerpage.TabPosition = #tabheaders
+    setzindex(newheader, 3)
+    newheader.Parent = hubbar
+    resizeHubBar()
+end
+
+local function removeheader(oldheader)
+    local removedPos = nil
+    for i = 1, #tabheaders do
+        if tabheaders[i] == oldheader then removedPos = i; table.remove(tabheaders, i) end
+    end
+    if removedPos then
+        for i = removedPos, #tabheaders do
+            tabheaders[i].Position = UDim2.new(
+                tabheaders[i].Position.X.Scale, tabheaders[i].Position.X.Offset - oldheader.AbsoluteSize.X,
+                tabheaders[i].Position.Y.Scale, tabheaders[i].Position.Y.Offset
+            )
+        end
+    end
+    oldheader.Parent = nil
+end
+
+local function addpage(name, icon, build, tab)
+    local pg = mkpage(name, icon)
+    if tab then
+        if tab.w then pg.TabHeader.Size = UDim2.new(0, tab.w, 1, 0) end
+        if tab.iw then pg.Icon.Size = UDim2.new(0, tab.iw, 0, tab.ih or tab.iw) end
+        if tab.ix then pg.Icon.Position = UDim2.new(0, tab.ix, 0.5, tab.iy or -18) end
+    end
+    pages[#pages + 1] = pg
+    addheader(pg.TabHeader, pg)
+    pg.Page.Position = UDim2.new(pg.TabPosition - 1, 0, 0, 0)
+    if build then
+        local ok, h = pcall(build, pg.Page)
+        if ok and type(h) == "number" then
+            pg.Height = h
+        end
+        pg.Page.Size = UDim2.new(1, 0, 0, pg.Height)
+    end
+    return pg
+end
+
+local function addtab(name, icon, tab)
+    local header = Instance.new("TextButton")
+    header.Name = name .. "Tab"
+    header.Text = ""
+    header.BackgroundTransparency = 1
+    header.Size = UDim2.new(0, 169, 1, 0)
+    local ic = Instance.new("ImageLabel")
+    ic.Name = "Icon"
+    ic.BackgroundTransparency = 1
+    ic.Size = UDim2.new(0, 44, 0, 37)
+    ic.Position = UDim2.new(0, 10, 0.5, -18)
+    ic.Image = icon or ""
+    ic.ImageTransparency = 0.5
+    ic.Parent = header
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Text = name
+    title.Font = Enum.Font.SourceSansBold
+    title.FontSize = Enum.FontSize.Size24
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(1.05, 0, 1, 0)
+    title.Position = UDim2.new(1.2, 0, 0, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextTransparency = 0.5
+    title.Parent = ic
+    if tab then
+        if tab.w then header.Size = UDim2.new(0, tab.w, 1, 0) end
+        if tab.iw then ic.Size = UDim2.new(0, tab.iw, 0, tab.ih or tab.iw) end
+        if tab.ix then ic.Position = UDim2.new(0, tab.ix, 0.5, tab.iy or -18) end
+    end
+    setzindex(header, 3)
+    tabheaders[#tabheaders + 1] = header
+    header.Parent = hubbar
+    resizeHubBar()
+end
+
+switchpage = function(pg)
+    if curpage == pg then return end
+    local dir = 1
+    if curpage then
+        dir = (curpage.TabPosition < pg.TabPosition) and 1 or -1
+        curpage.TabSelection.Visible = false
+        curpage.Icon.ImageTransparency = 0.5
+        curpage.Title.TextTransparency = 0.5
+        if curpage.Page.Parent then
+            local cp = curpage.Page
+            local op = curpage
+            cp:TweenPosition(UDim2.new(-dir, 0, 0, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.1, true, function()
+                cp.Visible = false
+                op.Hidden:Fire()
+            end)
+        else
+            curpage.Hidden:Fire()
+        end
+    end
+    curpage = pg
+    pg.TabSelection.Visible = true
+    pg.Icon.ImageTransparency = 0
+    pg.Title.TextTransparency = 0
+    pg.Page.Parent = pv
+    pg.Page.Visible = true
+    pg.Page.Position = UDim2.new(-dir, 0, 0, 0)
+    pg.Page:TweenPosition(UDim2.new(0, 0, 0, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.1, true, function()
+        pg.Displayed:Fire()
+    end)
+    pv.CanvasSize = UDim2.new(0, 0, 0, pg.Height)
+    pv.CanvasPosition = Vector2.new(0, 0)
+    local chrome = not pg.HideChrome
+    hubbar.Visible = chrome
+    botbar.Visible = chrome
+end
+
+local function sethubvis(v)
+    hubopen = v
+    if v then
+        shield.Visible = true
+        shield:TweenPosition(UDim2.new(0, 0, 0, 0), Enum.EasingDirection.InOut, Enum.EasingStyle.Quart, 0.5, true)
+        topbarbg.BackgroundTransparency = 0
+        Container.Visible = false
+        hidepop()
+        for _, t in ipairs(hubHiddenTargets) do
+            hubPrevState[t] = t.Visible
+            t.Visible = false
+        end
+        if not curpage and pages[1] then switchpage(pages[1]) end
+    else
+        menustack = {}
+        shield:TweenPosition(UDim2.new(0, 0, -1, -36), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.4, true, function()
+            if not hubopen then shield.Visible = false end
+        end)
+        topbarbg.BackgroundTransparency = config.TopbarConstants.Topbar_Bg_Transparency
+        Container.Visible = not dis("PlayerList")
+        for _, t in ipairs(hubHiddenTargets) do
+            if hubPrevState[t] ~= nil then
+                t.Visible = hubPrevState[t]
+                hubPrevState[t] = nil
+            end
+        end
+    end
+    hamicon.Image = v and config.Assets.Hamburger_Down or config.Assets.Hamburger
+end
+
+local function togglesettings()
+    sethubvis(not hubopen)
+end
+conn(hamb.MouseButton1Click, function() togglesettings() end)
+conn(uis.InputBegan, function(inp, gpe)
+    if gpe then return end
+    if inp.KeyCode == Enum.KeyCode.Escape and hubopen then popmenu() end
+end)
+
+G.clientMid = G.clientMid or {}
+G.clientMid.AddPage = function(name, icon, build, tab)
+    return addpage(name, icon, build, tab)
+end
+G.clientMid.ToggleSettings = function()
+    togglesettings()
+end
+G.clientMid.SwitchPage = function(pg)
+    switchpage(pg)
+end
+
+local function mktxt(parent, name, text, pos, size, multi)
+    local t = Instance.new("TextBox")
+    t.Name = name
+    t.Text = text or ""
+    t.Font = Enum.Font.SourceSans
+    t.FontSize = Enum.FontSize.Size24
+    t.TextColor3 = Color3.new(49 / 255, 49 / 255, 49 / 255)
+    t.BackgroundColor3 = Color3.new(1, 1, 1)
+    t.BackgroundTransparency = 0.5
+    t.BorderSizePixel = 0
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.TextYAlignment = Enum.TextYAlignment.Top
+    t.TextWrapped = true
+    t.ClearTextOnFocus = false
+    t.MultiLine = multi or false
+    t.Position = pos
+    t.Size = size
+    t.Parent = parent
+    return t
+end
+
+local function mkbtn2(parent, name, text, pos, size, fn)
+    local b = Instance.new("ImageButton")
+    b.Name = name
+    b.Image = config.Assets.Menu_Button
+    b.ScaleType = Enum.ScaleType.Slice
+    b.SliceCenter = Rect.new(8, 6, 46, 44)
+    b.AutoButtonColor = false
+    b.BackgroundTransparency = 1
+    b.Position = pos
+    b.Size = size
+    b.ZIndex = 2
+    b.Parent = parent
+    local t = Instance.new("TextLabel")
+    t.Name = name .. "TextLabel"
+    t.BackgroundTransparency = 1
+    t.BorderSizePixel = 0
+    t.Size = UDim2.new(1, 0, 1, -8)
+    t.Position = UDim2.new(0, 0, 0, 0)
+    t.TextColor3 = Color3.new(1, 1, 1)
+    t.TextYAlignment = Enum.TextYAlignment.Center
+    t.TextXAlignment = Enum.TextXAlignment.Center
+    t.Font = Enum.Font.SourceSansBold
+    t.FontSize = Enum.FontSize.Size24
+    t.Text = text
+    t.TextWrapped = true
+    t.ZIndex = 2
+    t.Parent = b
+    conn(b.InputBegan, function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then
+            b.Image = config.Assets.Menu_Button_Selected
+        end
+    end)
+    conn(b.InputEnded, function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then
+            b.Image = config.Assets.Menu_Button
+        end
+    end)
+    conn(b.MouseButton1Click, fn)
+    return b
+end
+
+local function mklab(parent, name, text, pos, size, bold)
+    local l = Instance.new("TextLabel")
+    l.Name = name
+    l.Text = text
+    l.Font = bold and Enum.Font.SourceSansBold or Enum.Font.SourceSans
+    l.FontSize = bold and Enum.FontSize.Size24 or Enum.FontSize.Size18
+    l.TextColor3 = Color3.new(1, 1, 1)
+    l.BackgroundTransparency = 1
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Position = pos
+    l.Size = size
+    l.Parent = parent
+    return l
+end
+
+local function mktitle(parent, name, text, pos, size)
+    local l = Instance.new("TextLabel")
+    l.Name = name
+    l.Text = text
+    l.Font = Enum.Font.SourceSansBold
+    l.FontSize = Enum.FontSize.Size36
+    l.TextColor3 = Color3.new(1, 1, 1)
+    l.BackgroundTransparency = 1
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextWrapped = true
+    l.Position = pos
+    l.Size = size
+    l.Parent = parent
+    return l
+end
+
+local fsok = type(readfile) == "function" and type(writefile) == "function" and type(listfiles) == "function" and type(makefolder) == "function" and type(isfile) == "function" and type(isfolder) == "function" and type(loadfile) == "function"
+local plugdir = "clientMid/Plugins"
+local tmpdir = "clientMid/tmp"
+local tmpfile = tmpdir .. "/tmp.data"
+local loadedplugs = {}
+if fsok then
+    pcall(function()
+        if not isfolder("clientMid") then makefolder("clientMid") end
+        if not isfolder(plugdir) then makefolder(plugdir) end
+        if not isfolder(tmpdir) then makefolder(tmpdir) end
+    end)
+end
+
+local tmpvals = {}
+if fsok then
+    pcall(function()
+        if isfile(tmpfile) then
+            local fn = loadfile(tmpfile)
+            if fn then
+                local t = fn()
+                if type(t) == "table" then tmpvals = t end
+            end
+        end
+    end)
+end
+
+local function tmpSave()
+    if not fsok then return end
+    pcall(function()
+        local parts = {"return {"}
+        for k, v in pairs(tmpvals) do
+            parts[#parts + 1] = "[" .. string.format("%q", tostring(k)) .. "]=" .. string.format("%q", tostring(v)) .. ","
+        end
+        parts[#parts + 1] = "}"
+        writefile(tmpfile, table.concat(parts, "\n"))
+    end)
+end
+
+local function tmpSet(k, v)
+    tmpvals[k] = v
+    tmpSave()
+end
+
+local function tmpGet(k)
+    return tmpvals[k]
+end
+
+local disabledplugs = {}
+for k, v in pairs(tmpvals) do
+    if string.sub(k, 1, 8) == "plugdis_" and v == "1" then
+        disabledplugs[string.sub(k, 9)] = true
+    end
+end
+
+local function plugenc(meta, files)
+    local out = {"--<cmplug v=1>", "return {"}
+    out[#out + 1] = "meta = {"
+    for k, v in pairs(meta) do
+        out[#out + 1] = "[" .. string.format("%q", tostring(k)) .. "]=" .. string.format("%q", tostring(v)) .. ","
+    end
+    out[#out + 1] = "},files = {"
+    for k, v in pairs(files) do
+        out[#out + 1] = "[" .. string.format("%q", tostring(k)) .. "]=" .. string.format("%q", tostring(v)) .. ","
+    end
+    out[#out + 1] = "}}"
+    return table.concat(out, "\n")
+end
+
+local function plugdec(text)
+    local fn, err = loadstring(text)
+    if not fn then return nil, err end
+    local ok, t = pcall(fn)
+    if not ok or type(t) ~= "table" or type(t.meta) ~= "table" or type(t.files) ~= "table" or type(t.meta.name) ~= "string" then
+        return nil, "bad cmplug"
+    end
+    return t
+end
+
+local function pluginstall(t)
+    local dir = plugdir .. "/" .. t.meta.name
+    pcall(function()
+        if not isfolder(dir) then makefolder(dir) end
+        for path, content in pairs(t.files) do
+            writefile(dir .. "/" .. path, content)
+        end
+    end)
+    return dir
+end
+
+local function plugload(t)
+    if loadedplugs[t.meta.name] then return true end
+    local dir = pluginstall(t)
+    local entry = t.meta.entry or "main.lua"
+    local fn, err = loadfile(dir .. "/" .. entry)
+    if not fn then return false, err end
+    local ok, r = pcall(fn)
+    if not ok then return false, r end
+    loadedplugs[t.meta.name] = true
+    return true
+end
+
+local function plugloadraw(path)
+    local name = string.match(path, "([^/]+)%.lua$") or path
+    if loadedplugs[name] then return true end
+    local fn, err = loadfile(path)
+    if not fn then return false, err end
+    local ok, r = pcall(fn)
+    if not ok then return false, r end
+    loadedplugs[name] = true
+    return true
+end
+
+local plugrefresh = nil
+
+local sfx = Instance.new("Folder")
+sfx.Name = "ClientMidSFX"
+pcall(function() sfx.Parent = workspace end)
+local function playsnd(id)
+    pcall(function()
+        local s = Instance.new("Sound")
+        s.SoundId = "rbxassetid://" .. id
+        s.Parent = sfx
+        s:Play()
+        s.Ended:Connect(function()
+            if s then s:Destroy() end
+        end)
+    end)
+end
+
+local function buildplugins(page)
+    local openplugs = {}
+    local statusmsg = ""
+
+    mktitle(page, "PluginsTitle", "Plugins", UDim2.new(0, 10, 0, 5), UDim2.new(1, -220, 0, 36))
+    mkbtn2(page, "BuyPlugins", "Buy Plugins", UDim2.new(1, -210, 0, 10), UDim2.new(0, 200, 0, 56), function()
+        playsnd("5751743646")
+    end)
+    local stat = mklab(page, "PluginStatus", "", UDim2.new(0, 10, 0, 46), UDim2.new(1, -20, 0, 14), false)
+
+    local content = Instance.new("ScrollingFrame")
+    content.Name = "PlugContent"
+    content.Position = UDim2.new(0, 0, 0, 64)
+    content.Size = UDim2.new(1, 0, 1, -64)
+    content.BackgroundTransparency = 1
+    content.BorderSizePixel = 0
+    content.ScrollBarThickness = 6
+    content.CanvasSize = UDim2.new(0, 0, 0, 0)
+    content.Parent = page
+
+    local function status(s)
+        statusmsg = s
+        if stat then stat.Text = s end
+    end
+
+    local function readmeta(path)
+        if string.sub(path, -7) ~= ".cmplug" then return nil end
+        local ok, body = pcall(function() return readfile(path) end)
+        if not ok then return nil end
+        local t, err = plugdec(body)
+        if not t then return nil end
+        return t
+    end
+
+    local function plugcard(parent, path, isplug, y)
+        local nm = string.match(path, "([^/]+)$") or path
+        local key = isplug and string.sub(nm, 1, -8) or string.match(nm, "(.+)%.lua$")
+        local t = isplug and readmeta(path) or nil
+        local meta = t and t.meta or nil
+        local isdisabled = disabledplugs[key]
+        local tag = loadedplugs[key] and (isdisabled and " [off]" or " [on]") or ""
+        local disp = key .. tag
+
+        local card = Instance.new("ImageLabel")
+        card.Name = "Plug_" .. nm
+        card.Image = config.Assets.Dialog_White
+        card.ScaleType = Enum.ScaleType.Slice
+        card.SliceCenter = Rect.new(10, 10, 10, 10)
+        card.BackgroundTransparency = 1
+        card.ImageTransparency = isdisabled and 0.6 or 0.85
+        card.ZIndex = 2
+        card.Position = UDim2.new(0, 4, 0, y)
+        card.Parent = parent
+
+        local baseH = 64
+        local av = Instance.new("ImageLabel")
+        av.Name = "Icon"
+        av.BackgroundTransparency = 1
+        av.Size = UDim2.new(0, 48, 0, 48)
+        av.Position = UDim2.new(0, 10, 0, 8)
+        av.ZIndex = 3
+        av.Image = config.Assets.Plugins_Icon
+        if meta and meta.icon and meta.icon ~= "" then
+            av.Image = meta.icon:match("^%d+$") and ("rbxassetid://" .. meta.icon) or meta.icon
+        end
+        av.Parent = card
+
+        local nl = Instance.new("TextLabel")
+        nl.Name = "NameLabel"
+        nl.TextXAlignment = Enum.TextXAlignment.Left
+        nl.Font = Enum.Font.SourceSansBold
+        nl.FontSize = Enum.FontSize.Size24
+        nl.TextColor3 = Color3.new(1, 1, 1)
+        nl.BackgroundTransparency = 1
+        nl.Position = UDim2.new(0, 68, 0, 6)
+        nl.Size = UDim2.new(1, -390, 0, 24)
+        nl.ZIndex = 3
+        nl.Text = disp
+        nl.Parent = card
+
+        local dl = Instance.new("TextLabel")
+        dl.Name = "DescLabel"
+        dl.TextXAlignment = Enum.TextXAlignment.Left
+        dl.Font = Enum.Font.SourceSans
+        dl.FontSize = Enum.FontSize.Size18
+        dl.TextColor3 = Color3.new(1, 1, 1)
+        dl.BackgroundTransparency = 1
+        dl.Position = UDim2.new(0, 68, 0, 32)
+        dl.Size = UDim2.new(1, -390, 0, 22)
+        dl.ZIndex = 3
+        dl.Text = meta and table.concat({tostring(meta.version or ""), tostring(meta.author or ""), tostring(meta.desc or "")}, "  ") or "raw lua file"
+        dl.Parent = card
+
+        local function doUninstall()
+            pcall(function() delfile(path) end)
+            if isplug then pcall(function() delfolder(plugdir .. "/" .. key) end) end
+            loadedplugs[key] = nil
+            openplugs[key] = nil
+            status("uninstalled: " .. key)
+            renderrows()
+        end
+
+        local sb = Instance.new("ImageButton")
+        sb.Name = "Settings_" .. nm
+        sb.BackgroundTransparency = 1
+        sb.Size = UDim2.new(0, 42, 0, 42)
+        sb.Position = UDim2.new(1, -262, 0, 11)
+        sb.Image = config.Assets.GameSettingsTab_Icon
+        sb.ZIndex = 3
+        sb.Parent = card
+        conn(sb.MouseButton1Click, function()
+            openplugs[key] = not openplugs[key]
+            renderrows()
+        end)
+        mkbtn2(card, "Disable_" .. nm, isdisabled and "Enable" or "Disable", UDim2.new(1, -206, 0, 15), UDim2.new(0, 96, 0, 34), function()
+            disabledplugs[key] = not disabledplugs[key]
+            tmpSet("plugdis_" .. key, disabledplugs[key] and "1" or "0")
+            if not disabledplugs[key] and not loadedplugs[key] and t then pcall(plugload, t) end
+            status(disabledplugs[key] and ("disabled: " .. key) or ("enabled: " .. key))
+            renderrows()
+        end)
+        mkbtn2(card, "Uninstall_" .. nm, "Uninstall", UDim2.new(1, -102, 0, 15), UDim2.new(0, 92, 0, 34), doUninstall)
+        if openplugs[key] then
+            local sf = Instance.new("Frame")
+            sf.Name = "SettingsFrame"
+            sf.BackgroundTransparency = 1
+            sf.Size = UDim2.new(1, -44, 0, 0)
+            sf.Position = UDim2.new(0, 22, 0, 64)
+            sf.Parent = card
+            local sy = 0
+            if meta then
+                local function sfield(label, val, setf)
+                    mklab(sf, label .. "Label", label, UDim2.new(0, 4, 0, sy + 5), UDim2.new(0, 150, 1, 0), false)
+                    local b = mktxt(sf, "S_" .. label, val, UDim2.new(0, 158, 0, sy + 6), UDim2.new(1, -170, 0, 32), false)
+                    conn(b.FocusLost, function(entered)
+                        if entered then
+                            setf(b.Text)
+                            pcall(function() writefile(path, plugenc(t.meta, t.files)) end)
+                            status("saved settings for: " .. key)
+                            renderrows()
+                        end
+                    end)
+                    sy = sy + 42
+                end
+                sfield("Name", meta.name or "", function(v) meta.name = v end)
+                sfield("Version", meta.version or "", function(v) meta.version = v end)
+                sfield("Author", meta.author or "", function(v) meta.author = v end)
+                sfield("Description", meta.desc or "", function(v) meta.desc = v end)
+                sfield("Icon id", meta.icon or "", function(v) meta.icon = v end)
+                sf.Size = UDim2.new(1, -44, 0, sy)
+                baseH = 64 + sy + 10
+            else
+                mklab(sf, "NoSettings", "Raw .lua plugin - configure in your executor.", UDim2.new(0, 4, 0, 6), UDim2.new(1, -8, 0, 24), false)
+                sf.Size = UDim2.new(1, -44, 0, 40)
+                baseH = 64 + 40 + 10
+            end
+        end
+        card.Size = UDim2.new(1, -8, 0, baseH)
+        return y + baseH
+    end
+
+    renderrows = function()
+        for _, c in pairs(content:GetChildren()) do
+            c:Destroy()
+        end
+        local y = 4
+        if not fsok then
+            status("no executor filesystem")
+            content.CanvasSize = UDim2.new(0, 0, 0, y)
+            return
+        end
+        local ok, files = pcall(function() return listfiles(plugdir) end)
+        if not ok or not files then
+            status("list failed")
+            content.CanvasSize = UDim2.new(0, 0, 0, y)
+            return
+        end
+        local n = 0
+        for _, path in ipairs(files) do
+            local isplug = string.sub(path, -7) == ".cmplug"
+            local islua = string.sub(path, -4) == ".lua"
+            if isplug or islua then
+                y = plugcard(content, path, isplug, y) + 10
+                n = n + 1
+            end
+        end
+        if statusmsg == "" then
+            if n == 0 then
+                status("no plugins yet..")
+            else
+                status(n .. " plugin(s)")
+            end
+        end
+        content.CanvasSize = UDim2.new(0, 0, 0, y)
+    end
+
+    plugrefresh = function() renderrows() end
+    renderrows()
+    return 640
+end
+
+local function frst(plr)
+    if plr == Player then return Enum.FriendStatus.NotFriend end
+    local ok, s = pcall(function() return Player:GetFriendStatus(plr) end)
+    if ok and typeof(s) == "EnumItem" then return s end
+    return Enum.FriendStatus.NotFriend
+end
+
+local pgplayers = addpage("Players", config.Assets.PlayersTab_Icon, function(page)
+    page.Name = "Players"
+    return 140
+end, {w = 150, iw = 44, ih = 37, ix = 15, iy = -18})
+
+local function refplayers()
+    local page = pgplayers.Page
+    for _, c in pairs(page:GetChildren()) do
+        if c.Name == "PlayerRow" then c:Destroy() end
+    end
+    local srt = Players:GetPlayers()
+    table.sort(srt, function(a, b) return a.Name < b.Name end)
+    for i, plr in ipairs(srt) do
+        local p = plr
+        local row = Instance.new("ImageLabel")
+        row.Name = "PlayerRow"
+        row.Image = config.Assets.Dialog_White
+        row.ScaleType = Enum.ScaleType.Slice
+        row.SliceCenter = Rect.new(10, 10, 10, 10)
+        row.Size = UDim2.new(1, 0, 0, 60)
+        row.Position = UDim2.new(0, 0, 0, (i - 1) * 80 + 20)
+        row.BackgroundTransparency = 1
+        row.ImageTransparency = 0.85
+        row.ZIndex = 2
+        row.Parent = page
+        local av = Instance.new("ImageLabel")
+        av.Name = "Icon"
+        av.BackgroundTransparency = 1
+        av.Size = UDim2.new(0, 36, 0, 36)
+        av.Position = UDim2.new(0, 12, 0, 12)
+        av.ZIndex = 3
+        av.Parent = row
+        pcall(function()
+            av.Image = Players:GetUserThumbnailAsync(math.max(1, p.UserId), Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+        end)
+        local nl = Instance.new("TextLabel")
+        nl.Name = "NameLabel"
+        nl.TextXAlignment = Enum.TextXAlignment.Left
+        nl.Font = Enum.Font.SourceSans
+        nl.FontSize = Enum.FontSize.Size24
+        nl.TextColor3 = Color3.new(1, 1, 1)
+        nl.BackgroundTransparency = 1
+        nl.Position = UDim2.new(0, 60, 0.5, 0)
+        nl.Size = UDim2.new(0, 0, 0, 0)
+        nl.ZIndex = 3
+        nl.Text = getplname(p)
+        nl.Parent = row
+        conn(row.MouseEnter, function() row.ImageTransparency = 0.65 end)
+        conn(row.MouseLeave, function() row.ImageTransparency = 0.85 end)
+        local st = frst(p)
+        if st == Enum.FriendStatus.Friend then
+            local fl = Instance.new("TextButton")
+            fl.Name = "FriendStatus"
+            fl.Text = "Friend"
+            fl.BackgroundTransparency = 1
+            fl.Font = Enum.Font.SourceSans
+            fl.FontSize = Enum.FontSize.Size24
+            fl.TextColor3 = Color3.new(1, 1, 1)
+            fl.Position = UDim2.new(1, -198, 0, 7)
+            fl.Size = UDim2.new(0, 182, 0, 46)
+            fl.ZIndex = 3
+            fl.Parent = row
+        elseif st == Enum.FriendStatus.FriendRequestSent then
+            local fl = Instance.new("TextButton")
+            fl.Name = "FriendStatus"
+            fl.Text = "Request Sent"
+            fl.BackgroundTransparency = 1
+            fl.Font = Enum.Font.SourceSans
+            fl.FontSize = Enum.FontSize.Size24
+            fl.TextColor3 = Color3.new(1, 1, 1)
+            fl.Position = UDim2.new(1, -198, 0, 7)
+            fl.Size = UDim2.new(0, 182, 0, 46)
+            fl.ZIndex = 3
+            fl.Parent = row
+        elseif p ~= Player then
+            mkbtn2(row, "FriendStatus", "Add Friend", UDim2.new(1, -198, 0, 7), UDim2.new(0, 182, 0, 46), function()
+                pcall(function() Player:RequestFriendship(p) end)
+            end)
+        end
+    end
+    local h = 20 + 80 * #srt - 5
+    pgplayers.Height = h
+    page.Size = UDim2.new(1, 0, 0, h)
+    if curpage == pgplayers then pv.CanvasSize = UDim2.new(0, 0, 0, h) end
+end
+conn(pgplayers.Displayed.Event, function() refplayers() end)
+refplayers()
+
+local resetpg = addpage("Reset", nil, function(page)
+    page.Name = "ResetCharacter"
+    local t = Instance.new("TextLabel")
+    t.Name = "ResetCharacterText"
+    t.Text = "Are you sure you want to reset your character?"
+    t.Font = Enum.Font.SourceSansBold
+    t.FontSize = Enum.FontSize.Size36
+    t.TextColor3 = Color3.new(1, 1, 1)
+    t.BackgroundTransparency = 1
+    t.Size = UDim2.new(1, 0, 0, 200)
+    t.TextWrapped = true
+    t.ZIndex = 2
+    t.Parent = page
+    mkbtn2(t, "ResetCharacter", "Reset", UDim2.new(0.5, -220, 1, -30), UDim2.new(0, 200, 0, 50), function()
+        local ch = Player.Character
+        local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+        if hum then hum.Health = 0 end
+        sethubvis(false)
+    end)
+    mkbtn2(t, "DontResetCharacter", "Don't Reset", UDim2.new(0.5, 20, 1, -30), UDim2.new(0, 200, 0, 50), function()
+        popmenu()
+    end)
+    return 280
+end, nil, true)
+resetpg.HideChrome = true
+removeheader(resetpg.TabHeader)
+
+local leavepg = addpage("Leave", nil, function(page)
+    page.Name = "LeaveGamePage"
+    local t = Instance.new("TextLabel")
+    t.Name = "LeaveGameText"
+    t.Text = "Are you sure you want to leave the game?"
+    t.Font = Enum.Font.SourceSansBold
+    t.FontSize = Enum.FontSize.Size36
+    t.TextColor3 = Color3.new(1, 1, 1)
+    t.BackgroundTransparency = 1
+    t.Size = UDim2.new(1, 0, 0, 200)
+    t.TextWrapped = true
+    t.ZIndex = 2
+    t.Parent = page
+    mkbtn2(t, "LeaveGame", "Leave", UDim2.new(0.5, -220, 1, -30), UDim2.new(0, 200, 0, 50), function()
+        pcall(function() game:Shutdown() end)
+    end)
+    mkbtn2(t, "DontLeaveGame", "Don't Leave", UDim2.new(0.5, 20, 1, -30), UDim2.new(0, 200, 0, 50), function()
+        popmenu()
+    end)
+    return 280
+end, nil, true)
+leavepg.HideChrome = true
+removeheader(leavepg.TabHeader)
+
+local vol = 5
+pcall(function() vol = math.floor(UserSettings():GetService("UserGameSettings").MasterVolume * 10 + 0.5) end)
+local vollab = nil
+local function setvol(v)
+    vol = math.max(0, math.min(10, v))
+    pcall(function() UserSettings():GetService("UserGameSettings").MasterVolume = vol / 10 end)
+    if vollab then vollab.Text = tostring(vol) end
+end
+addpage("Settings", config.Assets.GameSettingsTab_Icon, function(page)
+    page.Name = "GameSettings"
+    mktitle(page, "VolumeTitle", "Volume", UDim2.new(0, 10, 0, 10), UDim2.new(1, -20, 0, 36))
+    mkbtn2(page, "VolumeDown", "-", UDim2.new(0, 10, 0, 40), UDim2.new(0, 44, 0, 32), function() setvol(vol - 1) end)
+    vollab = mklab(page, "VolumeValue", tostring(vol), UDim2.new(0, 62, 0, 40), UDim2.new(0, 60, 0, 32), true)
+    vollab.TextXAlignment = Enum.TextXAlignment.Center
+    mkbtn2(page, "VolumeUp", "+", UDim2.new(0, 130, 0, 40), UDim2.new(0, 44, 0, 32), function() setvol(vol + 1) end)
+    return 120
+end, {w = 125, iw = 34, ih = 34, ix = 10, iy = -17})
+
+addpage("Report", config.Assets.ReportAbuseTab_Icon, function(page)
+    page.Name = "ReportAbusePage"
+    mktitle(page, "ReportTitle", "Report Abuse", UDim2.new(0, 10, 0, 8), UDim2.new(1, -20, 0, 36))
+    mklab(page, "ReportWhoLabel", "Player name", UDim2.new(0, 10, 0, 38), UDim2.new(1, -20, 0, 20), false)
+    local who = mktxt(page, "ReportWho", "", UDim2.new(0, 10, 0, 60), UDim2.new(1, -20, 0, 26), false)
+    mklab(page, "ReportWhyLabel", "Reason", UDim2.new(0, 10, 0, 92), UDim2.new(1, -20, 0, 20), false)
+    local why = mktxt(page, "ReportWhy", "", UDim2.new(0, 10, 0, 114), UDim2.new(1, -20, 0, 80), true)
+    local rst = mklab(page, "ReportStatus", "", UDim2.new(0, 10, 0, 200), UDim2.new(1, -20, 0, 20), false)
+    mkbtn2(page, "ReportSubmit", "Submit Report", UDim2.new(0, 10, 0, 224), UDim2.new(0, 180, 0, 32), function()
+        local target = Players:FindFirstChild(who.Text)
+        if not target then rst.Text = "player not found" return end
+        local ok = pcall(function() Players:ReportAbuse(target) end)
+        rst.Text = ok and "report sent" or "report failed"
+    end)
+    return 270
+end, {w = 120, iw = 27, ih = 32, ix = 20, iy = -16})
+
+addpage("Help", config.Assets.HelpTab_Icon, function(page)
+    page.Name = "Help"
+    mktitle(page, "HelpTitle", "Help", UDim2.new(0, 10, 0, 8), UDim2.new(1, -20, 0, 36))
+    local keys = {
+        {"Move", "WASD / Arrow keys"},
+        {"Jump", "Space"},
+        {"Chat", "/"},
+        {"Menu", "Esc"},
+        {"Player list", "Tab"},
+        {"Reset character", "Esc > Reset"},
+        {"Leave game", "Esc > Leave"},
+    }
+    local y = 40
+    for _, k in ipairs(keys) do
+        mklab(page, "Help_" .. k[1], k[1] .. "  -  " .. k[2], UDim2.new(0, 14, 0, y), UDim2.new(1, -28, 0, 24), false)
+        y = y + 28
+    end
+    return y + 12
+end, {w = 100, iw = 33, ih = 33, ix = 10, iy = -16})
+
+local recording = false
+local recbtn = nil
+addpage("Record", config.Assets.RecordTab_Icon, function(page)
+    page.Name = "Record"
+    mktitle(page, "ScreenshotTitle", "Screenshot", UDim2.new(0, 10, 0, 8), UDim2.new(1, -20, 0, 36))
+    mklab(page, "ScreenshotBody", "Take a screenshot and save it to your computer.", UDim2.new(0, 10, 0, 42), UDim2.new(1, -20, 0, 44), false)
+    mkbtn2(page, "ScreenshotButton", "Take Screenshot", UDim2.new(0, 10, 0, 90), UDim2.new(0, 300, 0, 44), function()
+        sethubvis(false)
+    end)
+    mktitle(page, "VideoTitle", "Video", UDim2.new(0, 10, 0, 150), UDim2.new(1, -20, 0, 36))
+    mklab(page, "VideoBody", "Record your screen.", UDim2.new(0, 10, 0, 184), UDim2.new(1, -20, 0, 44), false)
+    recbtn = mkbtn2(page, "RecordButton", "Record Video", UDim2.new(0, 10, 0, 232), UDim2.new(0, 300, 0, 44), function()
+        recording = not recording
+        local lab = recbtn:FindFirstChild("RecordButtonTextLabel")
+        if lab then lab.Text = recording and "Stop Recording" or "Record Video" end
+    end)
+    return 300
+end, {w = 130, iw = 41, ih = 40, ix = 5, iy = -20})
+
+local plugtab = addpage("Plugins", config.Assets.Plugins_Icon, buildplugins, {w = 110, iw = 33, ih = 33, ix = 10, iy = -16})
+
+local function pushmenu()
+    if curpage then
+        menustack[#menustack + 1] = curpage
+    end
+end
+
+popmenu = function()
+    local pg = table.remove(menustack)
+    if pg then
+        switchpage(pg)
+    else
+        sethubvis(false)
+    end
+end
+
+local function botbtn(name, text, icon, fn)
+    local b = mkbtn2(botbar, name, text, UDim2.new(0, 0, 0, 0), UDim2.new(0, 260, 0, 70), fn)
+    if icon then
+        local im = Instance.new("ImageLabel")
+        im.Name = name .. "Hint"
+        im.Size = UDim2.new(0, 48, 0, 48)
+        im.Position = UDim2.new(0, 10, 0, 8)
+        im.BackgroundTransparency = 1
+        im.Image = icon
+        im.ZIndex = 3
+        im.Parent = b
+    end
+    return b
+end
+
+botbtn("LeaveGameButton", "Leave Game", config.Assets.Leave_Icon, function()
+    pushmenu()
+    switchpage(leavepg)
+end)
+botbtn("ResetCharacterButton", "Reset Character", config.Assets.Reset_Icon, function()
+    pushmenu()
+    switchpage(resetpg)
+end)
+botbtn("ResumeButton", "Resume Game", config.Assets.Resume_Icon, function()
+    menustack = {}
+    sethubvis(false)
+end)
+resizeHubBar()
+
+if fsok then
+    pcall(function()
+        for _, path in ipairs(listfiles(plugdir)) do
+            if string.sub(path, -7) == ".cmplug" then
+                local ok, body = pcall(function() return readfile(path) end)
+                if ok then
+                    local t = plugdec(body)
+                    if t and not disabledplugs[t.meta.name] then pcall(plugload, t) end
+                end
+            elseif string.sub(path, -4) == ".lua" then
+                local key = string.match(path, "([^/]+)%.lua$")
+                if key and not disabledplugs[key] then pcall(plugloadraw, path) end
+            end
+        end
+    end)
+    if plugrefresh then plugrefresh() end
+end
+resizeHubBar()
+
+--===================================================================
+-- CHAT (ported from 2016 Modules/Chat.lua) -> TextChatService
+--===================================================================
+if not dis("Chat") then
+    local function initChat()
+        local MESSAGES_FADE_OUT_TIME = 30
+
+        local TCS = game:GetService("TextChatService")
+
+local chatColours =
+{
+    Color3.new(253 / 255, 41 / 255, 67 / 255),
+    Color3.new(1 / 255, 162 / 255, 255 / 255),
+    Color3.new(2 / 255, 184 / 255, 87 / 255),
+    BrickColor.new("Bright violet").Color,
+    BrickColor.new("Bright orange").Color,
+    BrickColor.new("Bright yellow").Color,
+    BrickColor.new("Light reddish violet").Color,
+    BrickColor.new("Brick yellow").Color,
+}
+
+local function chatNameValue(pName)
+    local value = 0
+    for index = 1, #pName do
+        local cValue = string.byte(string.sub(pName, index, index))
+        local reverseIndex = #pName - index + 1
+        if #pName % 2 == 1 then reverseIndex = reverseIndex - 1 end
+        if reverseIndex % 4 >= 2 then cValue = -cValue end
+        value = value + cValue
+    end
+    return value
+end
+
+local function chatColour(pName)
+    return chatColours[(chatNameValue(pName) % #chatColours) + 1]
+end
+
+local chatSettings =
+{
+    GlobalTextColor = Color3.new(112 / 255, 110 / 255, 106 / 255),
+    WhisperTextColor = Color3.new(77 / 255, 139 / 255, 255 / 255),
+    TeamTextColor = Color3.new(230 / 255, 207 / 255, 0),
+    DefaultMessageTextColor = Color3.new(255 / 255, 255 / 255, 243 / 255),
+    AdminTextColor = Color3.new(1, 215 / 255, 0),
+    TextStrokeTransparency = 0.75,
+    TextStrokeColor = Color3.new(34 / 255, 34 / 255, 34 / 255),
+    Font = Enum.Font.SourceSansBold,
+    FontSize = Enum.FontSize.Size18,
+    MaxWindowChatMessages = 50,
+    MaxCharactersInMessage = 140,
+}
+chatSettings.FontSize = Enum.FontSize.Size18
+
+-- tiny signal helper (BindableEvent based, same as source Util.Signal)
+local function mksig()
+    local s = {}
+    local be = Instance.new("BindableEvent")
+    local argData, argCount
+    function s:fire(...)
+        argData = {...}
+        argCount = select('#', ...)
+        be:Fire()
+    end
+    function s:connect(f)
+        if not f then error("connect(nil)", 2) end
+        return conn(be.Event, function()
+            f(unpack(argData, 1, argCount))
+        end)
+    end
+    function s:wait()
+        local args = {be.Event:Wait()}
+        return unpack(args, 1, #args)
+    end
+    return s
+end
+
+-- simple easing helper (matches source Util.Linear)
+local function chatEase(t, b, c, d)
+    if t >= d then return b + c end
+    return c * t / d + b
+end
+local function propTween2(inst, prop, start, final, duration, cb)
+    local this = {}
+    this.StartTime = tick()
+    this.EndTime = this.StartTime + duration
+    this.Cancelled = false
+    local finished = false
+    local percent = 0
+    coroutine.wrap(function()
+        local now = tick()
+        while now < this.EndTime and inst do
+            if this.Cancelled then return end
+            local p = (now - this.StartTime) / duration
+            inst[prop] = chatEase(p, start, final - start, duration)
+            percent = math.max(0, math.min(1, p))
+            RunService.RenderStepped:Wait()
+            now = tick()
+        end
+        if not this.Cancelled and inst then
+            inst[prop] = final
+            finished = true
+            percent = 1
+            if cb then cb() end
+        end
+    end)()
+    function this:GetPercentComplete() return percent end
+    function this:IsFinished() return finished end
+    function this:Cancel() this.Cancelled = true end
+    return this
+end
+
+local testLabel
+local textSizeCache = {}
+local function stringTextBounds(text, font, fontSize, sizeBounds)
+    text = text or ""
+    local sb = sizeBounds or false
+    if not textSizeCache[text] then textSizeCache[text] = {} end
+    if not textSizeCache[text][font] then textSizeCache[text][font] = {} end
+    if not textSizeCache[text][font][sb] then textSizeCache[text][font][sb] = {} end
+    if not textSizeCache[text][font][sb][fontSize] then
+        if not testLabel or not testLabel.Parent then
+            testLabel = Instance.new("TextLabel")
+            testLabel.TextWrapped = true
+            testLabel.Position = UDim2.new(1, 0, 1, 0)
+            testLabel.Parent = screenGui
+        end
+        testLabel.Text = text
+        testLabel.Font = font
+        testLabel.FontSize = fontSize
+        if sizeBounds then
+            testLabel.TextWrapped = true
+            testLabel.Size = sizeBounds
+        else
+            testLabel.TextWrapped = false
+        end
+        textSizeCache[text][font][sb][fontSize] = testLabel.TextBounds
+    end
+    return textSizeCache[text][font][sb][fontSize]
+end
+
+-- =================================================================
+-- CreateSystemChatMessage  (source lines 406-499)
+-- =================================================================
+local function CreateSystemChatMessage(settings, chatMsg)
+    local this = {}
+    this.FadeRoutines = {}
+    this.Settings = settings
+    this.chatMessage = chatMsg
+
+    function this:FadeIn()
+        local gui = this.Container
+        if gui then
+            gui.Visible = true
+            for _, r in pairs(this.FadeRoutines) do r:Cancel() end
+            this.FadeRoutines = {}
+            this.ChatMessage.TextTransparency = 0
+            this.ChatMessage.TextStrokeTransparency = settings.TextStrokeTransparency
+        end
+    end
+
+    function this:FadeOut(instant)
+        local gui = this.Container
+        if gui then
+            if instant then
+                gui.Visible = false
+            else
+                local obj = this.ChatMessage
+                table.insert(this.FadeRoutines, propTween2(obj, 'TextTransparency', obj.TextTransparency, 1, 1))
+                table.insert(this.FadeRoutines, propTween2(obj, 'TextStrokeTransparency', obj.TextStrokeTransparency, 1, 0.85))
+            end
+        end
+    end
+
+    function this:GetGui() return this.Container end
+
+    function this:Destroy()
+        if this.Container then this.Container:Destroy(); this.Container = nil end
+        for _, r in pairs(this.FadeRoutines) do r:Cancel() end
+        this.FadeRoutines = {}
+    end
+
+    function this:OnResize()
+        if this.Container and this.ChatMessage then
+            this.Container.Size = UDim2.new(1, 0, 0, 1000)
+            local th = this.ChatMessage.TextBounds.Y
+            this.Container.Size = UDim2.new(1, 0, 0, th + 1)
+            return th
+        end
+    end
+
+    local function build()
+        local text = this.chatMessage or ""
+        local size = stringTextBounds(text, settings.Font, settings.FontSize, UDim2.new(0, 400, 0, 1000))
+        local container = Instance.new("Frame")
+        container.Name = 'MessageContainer'
+        container.Position = UDim2.new(0, 0, 0, 0)
+        container.ZIndex = 1
+        container.BackgroundColor3 = Color3.new(0, 0, 0)
+        container.BackgroundTransparency = 1
+        local cm = Instance.new("TextLabel")
+        cm.Name = 'SystemChatMessage'
+        cm.Position = UDim2.new(0, 0, 0, 0)
+        cm.Size = UDim2.new(1, 0, 1, 0)
+        cm.Text = text
+        cm.ZIndex = 1
+        cm.BackgroundColor3 = Color3.new(0, 0, 0)
+        cm.BackgroundTransparency = 1
+        cm.TextXAlignment = Enum.TextXAlignment.Left
+        cm.TextYAlignment = Enum.TextYAlignment.Top
+        cm.TextWrapped = true
+        cm.TextColor3 = settings.DefaultMessageTextColor
+        cm.FontSize = settings.FontSize
+        cm.Font = settings.Font
+        cm.TextStrokeColor3 = settings.TextStrokeColor
+        cm.TextStrokeTransparency = settings.TextStrokeTransparency
+        cm.Parent = container
+        container.Size = UDim2.new(1, 0, 0, size.Y + 1)
+        this.Container = container
+        this.ChatMessage = cm
+    end
+    build()
+    return this
+end
+
+-- =================================================================
+-- CreatePlayerChatMessage  (source lines 560-887)
+-- =================================================================
+local function CreatePlayerChatMessage(settings, playerChatType, sendingPlayer, chatMsg, receivingPlayer)
+    local this = {}
+    this.FadeRoutines = {}
+    this.Settings = settings
+    this.PlayerChatType = playerChatType
+    this.SendingPlayer = sendingPlayer
+    this.RawMessageContent = chatMsg
+    this.ReceivingPlayer = receivingPlayer
+    this.ReceivedTime = tick()
+    this.Neutral = (sendingPlayer and sendingPlayer.Neutral) or true
+    this.TeamColor = (sendingPlayer and sendingPlayer.TeamColor) or BrickColor.new("White")
+
+    function this:FadeIn()
+        local gui = this.Container
+        if gui then
+            gui.Visible = true
+            for _, r in pairs(this.FadeRoutines) do r:Cancel() end
+            this.FadeRoutines = {}
+            local objs = {this.WhisperToText, this.WhisperFromText, this.ChatModeButton, this.UserNameButton, this.ChatMessage}
+            for _, o in pairs(objs) do
+                if o then
+                    o.TextTransparency = 0
+                    o.TextStrokeTransparency = settings.TextStrokeTransparency
+                    o.Active = true
+                end
+            end
+            if this.UserNameDot then this.UserNameDot.ImageTransparency = 0 end
+        end
+    end
+
+    function this:FadeOut(instant)
+        local gui = this.Container
+        if gui then
+            if instant then
+                gui.Visible = false
+            else
+                local objs = {this.WhisperToText, this.WhisperFromText, this.ChatModeButton, this.UserNameButton, this.ChatMessage}
+                for _, o in pairs(objs) do
+                    if o then
+                        table.insert(this.FadeRoutines, propTween2(o, 'TextTransparency', o.TextTransparency, 1, 1))
+                        table.insert(this.FadeRoutines, propTween2(o, 'TextStrokeTransparency', o.TextStrokeTransparency, 1, 0.85))
+                        o.Active = false
+                    end
+                end
+                if this.UserNameDot then
+                    table.insert(this.FadeRoutines, propTween2(this.UserNameDot, 'ImageTransparency', this.UserNameDot.ImageTransparency, 1, 1))
+                end
+            end
+        end
+    end
+
+    function this:GetGui() return this.Container end
+
+    function this:Destroy()
+        if this.Container then this.Container:Destroy(); this.Container = nil end
+        for _, r in pairs(this.FadeRoutines) do r:Cancel() end
+        this.FadeRoutines = {}
+        if this.ClickedOnModeConn then this.ClickedOnModeConn:Disconnect() end
+        if this.ClickedOnPlayerConn then this.ClickedOnPlayerConn:Disconnect() end
+        if this.RightClickedOnPlayerConn then this.RightClickedOnPlayerConn:Disconnect() end
+    end
+
+    function this:OnResize()
+        if this.Container and this.ChatMessage then
+            this.Container.Size = UDim2.new(1, 0, 0, 1000)
+            local th = this.ChatMessage.TextBounds.Y
+            this.Container.Size = UDim2.new(1, 0, 0, th + 1)
+            return th
+        end
+    end
+
+    local function formatChatType()
+        if this.PlayerChatType then
+            if this.PlayerChatType == Enum.PlayerChatType.Team then return '[Team]' end
+        end
+    end
+
+    local function formatPlayerName()
+        local nm = ""
+        if this.PlayerChatType == Enum.PlayerChatType.Whisper and this.SendingPlayer and this.SendingPlayer == Player then
+            nm = (this.ReceivingPlayer and getplname(this.ReceivingPlayer) or "")
+        else
+            nm = (this.SendingPlayer and getplname(this.SendingPlayer) or "")
+        end
+        return '[' .. nm .. ']:'
+    end
+
+    local function build()
+        local fontSize = settings.FontSize
+        local toText = "To "
+        local toSize = stringTextBounds(toText, settings.Font, fontSize)
+        local fromText = "From "
+        local fromSize = stringTextBounds(fromText, settings.Font, fontSize)
+        local chatTypeDisp = formatChatType()
+        local chatTypeSize = chatTypeDisp and stringTextBounds(chatTypeDisp, settings.Font, fontSize) or Vector2.new(0, 0)
+        local playerNameDisp = formatPlayerName()
+        local playerNameSize = stringTextBounds(playerNameDisp, settings.Font, fontSize)
+        local spaceSize = stringTextBounds(" ", settings.Font, fontSize)
+        local numSpaces = math.ceil(playerNameSize.X / math.max(1, spaceSize.X)) + 1
+        local msgDisp = string.rep(" ", numSpaces) .. this.RawMessageContent
+        local msgSize = stringTextBounds(msgDisp, settings.Font, fontSize, UDim2.new(0, 400 - 5 - playerNameSize.X, 0, 1000))
+
+        local playerColor = settings.DefaultMessageTextColor
+        if this.SendingPlayer then
+            if this.PlayerChatType == Enum.PlayerChatType.Whisper then
+                if this.SendingPlayer == Player and this.ReceivingPlayer then
+                    playerColor = chatColour(this.ReceivingPlayer.Name)
+                else
+                    playerColor = chatColour(this.SendingPlayer.Name)
+                end
+            else
+                if this.SendingPlayer.Neutral then
+                    playerColor = chatColour(this.SendingPlayer.Name)
+                else
+                    playerColor = this.SendingPlayer.TeamColor.Color
+                end
+            end
+        end
+
+        local container = Instance.new("Frame")
+        container.Name = 'MessageContainer'
+        container.Position = UDim2.new(0, 0, 0, 0)
+        container.ZIndex = 1
+        container.BackgroundColor3 = Color3.new(0, 0, 0)
+        container.BackgroundTransparency = 1
+
+        local xOffset = 0
+
+        local function mktext(name, text, size)
+            local l = Instance.new("TextLabel")
+            l.Name = name
+            l.Position = UDim2.new(0, xOffset, 0, 0)
+            l.Size = size
+            l.Text = text
+            l.ZIndex = 1
+            l.BackgroundColor3 = Color3.new(0, 0, 0)
+            l.BackgroundTransparency = 1
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.TextYAlignment = Enum.TextYAlignment.Top
+            l.TextWrapped = true
+            l.TextColor3 = settings.DefaultMessageTextColor
+            l.FontSize = fontSize
+            l.Font = settings.Font
+            l.TextStrokeColor3 = settings.TextStrokeColor
+            l.TextStrokeTransparency = settings.TextStrokeTransparency
+            l.Parent = container
+            return l
+        end
+
+        if this.SendingPlayer and this.SendingPlayer == Player and this.PlayerChatType == Enum.PlayerChatType.Whisper then
+            this.WhisperToText = mktext('WhisperTo', toText, UDim2.new(0, toSize.X, 0, toSize.Y))
+            xOffset = xOffset + toSize.X
+        elseif this.SendingPlayer and this.SendingPlayer ~= Player and this.PlayerChatType == Enum.PlayerChatType.Whisper then
+            this.WhisperFromText = mktext('WhisperFromText', fromText, UDim2.new(0, fromSize.X, 0, fromSize.Y))
+            xOffset = xOffset + fromSize.X
+        else
+            if config.ChatTeamIndicator ~= false then
+                local dot = Instance.new("ImageLabel")
+                dot.Name = "UserNameDot"
+                dot.Size = UDim2.new(0, 14, 0, 14)
+                dot.BackgroundTransparency = 1
+                dot.Position = UDim2.new(0, 0, 0, math.max(0, ((playerNameSize and playerNameSize.Y or 0) - 14) / 2) + 2)
+                dot.BorderSizePixel = 0
+                dot.Image = config.Assets.Chat_TeamButton
+                dot.ImageColor3 = playerColor
+                dot.ImageTransparency = 0
+                dot.Parent = container
+                this.UserNameDot = dot
+                xOffset = xOffset + 14 + 3
+            end
+        end
+
+        if chatTypeDisp then
+            local mode = Instance.new("TextButton")
+            mode.Name = 'ChatMode'
+            mode.BackgroundTransparency = 1
+            mode.ZIndex = 2
+            mode.Text = chatTypeDisp
+            mode.TextColor3 = settings.DefaultMessageTextColor
+            mode.Position = UDim2.new(0, xOffset, 0, 0)
+            mode.TextXAlignment = Enum.TextXAlignment.Left
+            mode.TextYAlignment = Enum.TextYAlignment.Top
+            mode.FontSize = fontSize
+            mode.Font = settings.Font
+            mode.Size = UDim2.new(0, chatTypeSize.X, 0, chatTypeSize.Y)
+            mode.TextStrokeColor3 = settings.TextStrokeColor
+            mode.TextStrokeTransparency = settings.TextStrokeTransparency
+            mode.Parent = container
+            this.ChatModeButton = mode
+            if this.PlayerChatType == Enum.PlayerChatType.Team then
+                mode.TextColor3 = playerColor
+            end
+            xOffset = xOffset + chatTypeSize.X + 1
+        end
+
+        local uName = Instance.new("TextButton")
+        uName.Name = 'PlayerName'
+        uName.BackgroundTransparency = 1
+        uName.BackgroundColor3 = Color3.new(0, 1, 1)
+        uName.BorderSizePixel = 0
+        uName.ZIndex = 2
+        uName.Text = playerNameDisp
+        uName.TextColor3 = playerColor
+        uName.Position = UDim2.new(0, xOffset, 0, 0)
+        uName.TextXAlignment = Enum.TextXAlignment.Left
+        uName.TextYAlignment = Enum.TextYAlignment.Top
+        uName.FontSize = fontSize
+        uName.Font = settings.Font
+        uName.Size = UDim2.new(0, playerNameSize.X, 0, playerNameSize.Y)
+        uName.TextStrokeColor3 = settings.TextStrokeColor
+        uName.TextStrokeTransparency = settings.TextStrokeTransparency
+        uName.Parent = container
+        this.UserNameButton = uName
+
+        local chatMessage = Instance.new("TextLabel")
+        chatMessage.Name = 'ChatMessage'
+        chatMessage.Position = UDim2.new(0, xOffset, 0, 0)
+        chatMessage.Size = UDim2.new(1, -xOffset, 1, 0)
+        chatMessage.Text = msgDisp
+        chatMessage.ZIndex = 1
+        chatMessage.BackgroundColor3 = Color3.new(0, 0, 0)
+        chatMessage.BackgroundTransparency = 1
+        chatMessage.TextXAlignment = Enum.TextXAlignment.Left
+        chatMessage.TextYAlignment = Enum.TextYAlignment.Top
+        chatMessage.TextWrapped = true
+        chatMessage.TextColor3 = settings.DefaultMessageTextColor
+        chatMessage.FontSize = fontSize
+        chatMessage.Font = settings.Font
+        chatMessage.TextStrokeColor3 = settings.TextStrokeColor
+        chatMessage.TextStrokeTransparency = settings.TextStrokeTransparency
+        chatMessage.Parent = container
+        chatMessage.Size = chatMessage.Size + UDim2.new(0, 0, 0, chatMessage.TextBounds.Y)
+
+        container.Size = UDim2.new(1, 0, 0, math.max(msgSize.Y + 1, uName.Size.Y.Offset + 1))
+        this.Container = container
+        this.ChatMessage = chatMessage
+    end
+
+    build()
+    return this
+end
+
+-- =================================================================
+-- =================================================================
+    -- Chat Widget (window + bar), faithful to 2016 topbar layout
+    -- =================================================================
+    local chatVisible = true
+
+    ---- ChatWindow ----
+    local chatContainer = Instance.new("Frame")
+    chatContainer.Name = 'ChatWindowContainer'
+    chatContainer.Size = UDim2.new(0.3, 0, 0.25, 0)
+    chatContainer.Position = UDim2.new(0, 0, 0, 38)
+    chatContainer.AnchorPoint = Vector2.new(0, 0)
+    chatContainer.ZIndex = 0
+    chatContainer.Active = true
+    chatContainer.BackgroundColor3 = Color3.new(31 / 255, 31 / 255, 31 / 255)
+    chatContainer.BackgroundTransparency = 1
+    chatContainer.BorderSizePixel = 0
+    chatContainer.Parent = screenGui
+    registerHubHidden(chatContainer)
+
+    local helpHeader = Instance.new("Frame")
+    helpHeader.Name = 'ChatHelpHeader'
+    helpHeader.Position = UDim2.new(0, 10, 0, 4)
+    helpHeader.Size = UDim2.new(1, -14, 0, 46)
+    helpHeader.BackgroundTransparency = 1
+    helpHeader.ZIndex = 2
+    local helpText = Instance.new("TextLabel")
+    helpText.Name = 'HelpText'
+    helpText.Size = UDim2.new(1, 0, 0, 22)
+    helpText.BackgroundTransparency = 1
+    helpText.TextXAlignment = Enum.TextXAlignment.Left
+    helpText.TextYAlignment = Enum.TextYAlignment.Top
+    helpText.TextWrapped = true
+    helpText.Text = "Please chat '/?' for a list of commands"
+    helpText.Font = chatSettings.Font
+    helpText.FontSize = chatSettings.FontSize
+    helpText.TextColor3 = chatSettings.DefaultMessageTextColor
+    helpText.TextStrokeColor3 = chatSettings.TextStrokeColor
+    helpText.TextStrokeTransparency = chatSettings.TextStrokeTransparency
+    helpText.Parent = helpHeader
+    local helpSubText = Instance.new("TextLabel")
+    helpSubText.Name = 'HelpSubText'
+    helpSubText.Position = UDim2.new(0, 0, 0, 23)
+    helpSubText.Size = UDim2.new(1, 0, 0, 22)
+    helpSubText.BackgroundTransparency = 1
+    helpSubText.TextXAlignment = Enum.TextXAlignment.Left
+    helpSubText.TextYAlignment = Enum.TextYAlignment.Top
+    helpSubText.TextWrapped = true
+    helpSubText.Text = "Say hi to all people playing!"
+    helpSubText.Font = chatSettings.Font
+    helpSubText.FontSize = chatSettings.FontSize
+    helpSubText.TextColor3 = Color3.new(1, 0.843, 0)
+    helpSubText.TextStrokeColor3 = chatSettings.TextStrokeColor
+    helpSubText.TextStrokeTransparency = chatSettings.TextStrokeTransparency
+    helpSubText.Parent = helpHeader
+    helpHeader.Parent = chatContainer
+
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Name = 'ChatWindow'
+    scrollFrame.Size = UDim2.new(1, -14, 1, -64)
+    scrollFrame.CanvasSize = UDim2.new(1, -14, 0, 0)
+    scrollFrame.Position = UDim2.new(0, 10, 0, 54)
+    scrollFrame.ZIndex = 1
+    scrollFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.BottomImage = config.Assets.Scroll_Bottom_Image
+    scrollFrame.MidImage = config.Assets.Scroll_Middle_Image
+    scrollFrame.TopImage = config.Assets.Scroll_Top_Image
+    scrollFrame.ScrollBarThickness = 0
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollingEnabled = false
+    scrollFrame.ClipsDescendants = true
+    scrollFrame.Parent = chatContainer
+
+    local messageContainer = Instance.new("Frame")
+    messageContainer.Name = 'MessageContainer'
+    messageContainer.Size = UDim2.new(1, -8, 0, 0)
+    messageContainer.Position = UDim2.new(0, 0, 1, 0)
+    messageContainer.ZIndex = 1
+    messageContainer.BackgroundColor3 = Color3.new(0, 0, 0)
+    messageContainer.BackgroundTransparency = 1
+    messageContainer.Parent = scrollFrame
+
+    local Chats = {}
+    local MessageCount = 0
+    local BackgroundVisible = false
+    local ChatsVisible = false
+    local NewUnreadMessage = false
+    local FadeLock = false
+    local lastChatActivity = 0
+    local dontFadeOutOnMouseLeave = false
+    local backgroundTweener = nil
+    local lastMousePos = Vector2.new()
+    local lastMoveTime = tick()
+    local lastEnterTime = tick()
+    local lastLeaveTime = tick()
+    local clickCount = 0
+
+    local function pointInChatWindow(p)
+        local p0 = chatContainer.AbsolutePosition
+        local p1 = p0 + chatContainer.AbsoluteSize + Vector2.new(0, 34)
+        return p0.X <= p.X and p1.X >= p.X and p0.Y <= p.Y and p1.Y >= p.Y
+    end
+
+    local function isHovering()
+        if chatContainer and lastMousePos and chatVisible then
+            return pointInChatWindow(lastMousePos)
+        end
+        return false
+    end
+
+    local function isScrolledDown()
+        local yCanvas = scrollFrame.CanvasSize.Y.Offset
+        local yContainer = scrollFrame.AbsoluteWindowSize.Y
+        local yScrolled = scrollFrame.CanvasPosition.Y
+        return yCanvas < yContainer or (yCanvas - yScrolled <= yContainer + 5)
+    end
+
+    local function setCanvasPosition(newPos)
+        local maxSize = Vector2.new(
+            math.max(0, scrollFrame.CanvasSize.X.Offset - scrollFrame.AbsoluteWindowSize.X),
+            math.max(0, scrollFrame.CanvasSize.Y.Offset - scrollFrame.AbsoluteWindowSize.Y))
+        scrollFrame.CanvasPosition = Vector2.new(
+            math.max(0, math.min(maxSize.X, newPos.X)),
+            math.max(0, math.min(maxSize.Y, newPos.Y)))
+    end
+
+    local function scrollToBottom()
+        setCanvasPosition(Vector2.new(scrollFrame.CanvasPosition.X, scrollFrame.CanvasSize.Y.Offset))
+    end
+
+    local function fadeOutChats()
+        if ChatsVisible == false then return end
+        ChatsVisible = false
+        if helpHeader then helpHeader.Visible = false end
+        for _, m in pairs(Chats) do
+            local g = m:GetGui()
+            local instant = false
+            if g and scrollFrame then
+                if g.AbsolutePosition.Y > (scrollFrame.AbsolutePosition + scrollFrame.AbsoluteWindowSize).Y or
+                    g.AbsolutePosition.Y + g.AbsoluteSize.Y < scrollFrame.AbsolutePosition.Y then
+                    instant = true
+                end
+            end
+            m:FadeOut(instant)
+        end
+    end
+
+    local function fadeInChats()
+        if ChatsVisible == true then return end
+        ChatsVisible = true
+        if helpHeader then helpHeader.Visible = true end
+        for _, m in pairs(Chats) do m:FadeIn() end
+    end
+
+    local fadeInSignal = mksig()
+    local fadeOutSignal = mksig()
+
+    local function fadeIn(duration)
+        if not FadeLock then
+            duration = duration or 0.75
+            local bgAlpha = 0.5
+            if backgroundTweener then backgroundTweener:Cancel() end
+            lastChatActivity = tick()
+            scrollFrame.ScrollingEnabled = true
+            scrollFrame.ScrollBarThickness = 7
+            backgroundTweener = propTween2(chatContainer, 'BackgroundTransparency', chatContainer.BackgroundTransparency, bgAlpha, duration)
+            BackgroundVisible = true
+            fadeInChats()
+            fadeInSignal:fire()
+        end
+    end
+
+    local function fadeOut(duration)
+        if not FadeLock then
+            duration = duration or 0.75
+            if backgroundTweener then backgroundTweener:Cancel() end
+            lastChatActivity = tick()
+            scrollFrame.ScrollingEnabled = false
+            scrollFrame.ScrollBarThickness = 0
+            backgroundTweener = propTween2(chatContainer, 'BackgroundTransparency', chatContainer.BackgroundTransparency, 1, duration)
+            BackgroundVisible = false
+            fadeOutSignal:fire()
+        end
+    end
+
+    local removeOldest
+
+    local function pushMessage(chatMessage, silently)
+        table.insert(Chats, chatMessage)
+        local scrolledDown = isScrolledDown()
+        local el = chatMessage:GetGui()
+        el.Parent = messageContainer
+        chatMessage:OnResize()
+        local ySize = messageContainer.Size.Y.Offset
+        local elY = UDim2.new(0, 0, 0, el.Size.Y.Offset)
+        if not silently then MessageCount = MessageCount + 1 end
+        el.Position = el.Position + UDim2.new(0, 0, 0, ySize)
+        messageContainer.Size = messageContainer.Size + elY
+        messageContainer.Position = UDim2.new(0, 0, 1, -messageContainer.Size.Y.Offset)
+        scrollFrame.CanvasSize = scrollFrame.CanvasSize + elY
+        if chatSettings.MaxWindowChatMessages < #Chats then removeOldest() end
+        if scrolledDown then
+            scrollToBottom()
+        elseif not silently then
+            NewUnreadMessage = true
+        end
+        if silently then
+            if ChatsVisible == false then chatMessage:FadeOut(true) end
+        else
+            fadeInChats()
+            lastChatActivity = tick()
+        end
+    end
+
+    removeOldest = function()
+        local oldest = Chats[1]
+        if oldest then
+            for i, m in pairs(Chats) do
+                if m == oldest then
+                    local g = oldest:GetGui()
+                    if g then
+                        local y = g.Size.Y.Offset
+                        scrollFrame.CanvasSize = scrollFrame.CanvasSize - UDim2.new(0, 0, 0, y)
+                        setCanvasPosition(scrollFrame.CanvasPosition)
+                        g.Parent = nil
+                    end
+                    oldest:Destroy()
+                    return table.remove(Chats, i)
+                end
+            end
+        end
+    end
+
+    local function stripRichText(text)
+        return (text or ""):gsub("<[^>]*>", "")
+    end
+
+    local function addSystemChatMessage(msg, silently)
+        local m = CreateSystemChatMessage(chatSettings, stripRichText(msg))
+        pushMessage(m, silently)
+    end
+
+    local function addChatMessage(playerChatType, sendingPlayer, msg, receivingPlayer, silently)
+        if msg and string.sub(msg, 1, 1) ~= '/' then
+            local m = CreatePlayerChatMessage(chatSettings, playerChatType, sendingPlayer, stripRichText(msg), receivingPlayer)
+            pushMessage(m, silently)
+        end
+    end
+
+    local function resizeMessages()
+        local ySize = 0
+        for _, m in pairs(Chats) do
+            local h = m:OnResize()
+            if h then
+                local g = m:GetGui()
+                if g then
+                    g.Position = UDim2.new(0, 0, 0, ySize)
+                    ySize = ySize + g.Size.Y.Offset
+                end
+            end
+        end
+        messageContainer.Size = UDim2.new(messageContainer.Size.X.Scale, messageContainer.Size.X.Offset, 0, ySize)
+        scrollFrame.CanvasSize = UDim2.new(scrollFrame.CanvasSize.X.Scale, scrollFrame.CanvasSize.X.Offset, scrollFrame.CanvasSize.Y.Scale, ySize)
+        scrollToBottom()
+    end
+
+    conn(chatContainer:GetPropertyChangedSignal('AbsoluteSize'), function()
+        if #Chats > 0 then resizeMessages() end
+        messageContainer.Position = UDim2.new(0, 0, 1, -messageContainer.Size.Y.Offset)
+    end)
+    conn(messageContainer:GetPropertyChangedSignal('AbsoluteSize'), function()
+        messageContainer.Position = UDim2.new(0, 0, 1, -messageContainer.Size.Y.Offset)
+    end)
+
+    ---- ChatBar (top-left, 2016 topbar style) ----
+    local chatBar = Instance.new("Frame")
+    chatBar.Name = 'ChatBarContainer'
+    chatBar.Position = UDim2.new(0, 0, 0.25, 40)
+    chatBar.Size = UDim2.new(0.3, 0, 0, 32)
+    chatBar.ZIndex = 1
+    chatBar.BackgroundColor3 = Color3.new(31 / 255, 31 / 255, 31 / 255)
+    chatBar.BackgroundTransparency = 0.5
+    chatBar.BorderSizePixel = 0
+    chatBar.Parent = screenGui
+    registerHubHidden(chatBar)
+
+    local barInner = Instance.new("Frame")
+    barInner.Name = 'InnerBackground'
+    barInner.Position = UDim2.new(0, 7, 0, 5)
+    barInner.Size = UDim2.new(1, -14, 1, -10)
+    barInner.ZIndex = 1
+    barInner.BackgroundColor3 = Color3.new(209 / 255, 216 / 255, 221 / 255)
+    barInner.BackgroundTransparency = 0.5
+    barInner.BorderSizePixel = 0
+    barInner.Parent = chatBar
+
+    local clickToChat = Instance.new("TextButton")
+    clickToChat.Name = 'ClickToChat'
+    clickToChat.Position = UDim2.new(0, 7, 0, 0)
+    clickToChat.Size = UDim2.new(1, -14, 1, 0)
+    clickToChat.BackgroundTransparency = 1
+    clickToChat.AutoButtonColor = false
+    clickToChat.ZIndex = 3
+    clickToChat.Text = 'To chat click here or press "/" key'
+    clickToChat.TextColor3 = chatSettings.GlobalTextColor
+    clickToChat.TextXAlignment = Enum.TextXAlignment.Left
+    clickToChat.TextYAlignment = Enum.TextYAlignment.Center
+    clickToChat.Font = Enum.Font.SourceSansBold
+    clickToChat.FontSize = Enum.FontSize.Size18
+    clickToChat.TextWrapped = true
+    clickToChat.Parent = barInner
+
+    local chatTextBox = Instance.new("TextBox")
+    chatTextBox.Name = 'ChatBar'
+    chatTextBox.Position = UDim2.new(0, 7, 0, 0)
+    chatTextBox.Size = UDim2.new(1, -14, 1, 0)
+    chatTextBox.Text = ""
+    chatTextBox.ZIndex = 1
+    chatTextBox.BackgroundColor3 = Color3.new(0, 0, 0)
+    chatTextBox.BackgroundTransparency = 1
+    chatTextBox.TextXAlignment = Enum.TextXAlignment.Left
+    chatTextBox.TextYAlignment = Enum.TextYAlignment.Center
+    chatTextBox.TextColor3 = chatSettings.GlobalTextColor
+    chatTextBox.Font = Enum.Font.SourceSansBold
+    chatTextBox.FontSize = Enum.FontSize.Size18
+    chatTextBox.TextWrapped = true
+    chatTextBox.ClearTextOnFocus = false
+    chatTextBox.Visible = false
+    chatTextBox.Parent = barInner
+
+    local chatModeText = Instance.new("TextButton")
+    chatModeText.Name = 'ChatModeText'
+    chatModeText.Position = UDim2.new(0, 7, 0, 0)
+    chatModeText.Size = UDim2.new(1, -14, 1, 0)
+    chatModeText.AutoButtonColor = false
+    chatModeText.BackgroundTransparency = 1
+    chatModeText.ZIndex = 2
+    chatModeText.Text = ''
+    chatModeText.TextColor3 = chatSettings.WhisperTextColor
+    chatModeText.TextXAlignment = Enum.TextXAlignment.Left
+    chatModeText.TextYAlignment = Enum.TextYAlignment.Center
+    chatModeText.Font = Enum.Font.SourceSansBold
+    chatModeText.FontSize = Enum.FontSize.Size18
+    chatModeText.Parent = barInner
+
+    local chatBarFocused = false
+    local messageMode = 'All'
+    local targetWhisperPlayer = nil
+    local consumeToggleChar = false
+    local function setBarVisible(v)
+        if v then
+            chatTextBox.Visible = true
+            clickToChat.Visible = false
+            chatModeText.Visible = true
+            barInner.BackgroundTransparency = 0
+        else
+            chatTextBox.Visible = false
+            clickToChat.Visible = true
+            chatModeText.Visible = false
+            barInner.BackgroundTransparency = 0.5
+        end
+    end
+    setBarVisible(false)
+
+    local function setBarSize(y)
+        chatBar.Size = UDim2.new(chatBar.Size.X.Scale, chatBar.Size.X.Offset, 0, y)
+    end
+
+    local function focusChat()
+        if not chatVisible then return end
+        chatTextBox.Visible = true
+        chatTextBox:CaptureFocus()
+        chatBarFocused = true
+        setBarSize(40)
+        setBarVisible(true)
+        fadeIn(0.25)
+        FadeLock = true
+    end
+
+    -- send helper (TextChatService)
+    local recentSent = {}
+    local function rememberSent(text)
+        recentSent[#recentSent + 1] = {text = text, t = tick()}
+        if #recentSent > 8 then table.remove(recentSent, 1) end
+    end
+    local function wasSent(text)
+        local now = tick()
+        for _, e in ipairs(recentSent) do
+            if now - e.t < 4 and e.text == text then return true end
+        end
+        return false
+    end
+    local function getGeneralChannel()
+        local channels = TCS:FindFirstChild("TextChannels")
+        if channels then
+            return channels:FindFirstChild("RBXGeneral") or channels:WaitForChild("RBXGeneral", 1)
+        end
+        return nil
+    end
+    local function getChannelByName(name)
+        local channels = TCS:FindFirstChild("TextChannels")
+        if channels then return channels:FindFirstChild(name) end
+        return nil
+    end
+    local function sendChatMessage(text)
+        rememberSent(text)
+        addChatMessage(Enum.PlayerChatType.All, Player, text)
+        local ch = getGeneralChannel()
+        if not ch then
+            print("clientMid chat: TextChannels/RBXGeneral not found")
+            return
+        end
+        local ok, err = pcall(function()
+            return ch:SendAsync(text, "")
+        end)
+        if not ok then
+            print("clientMid chat send error: " .. tostring(err))
+        end
+    end
+    local function sendTeamMessage(text)
+        local ch = getChannelByName("RBXTeam") or getChannelByName("TeamChat")
+        if not ch then
+            addSystemChatMessage("You're not on a team.", false)
+            return
+        end
+        local ok, err = pcall(function() return ch:SendAsync(text, "") end)
+        if not ok then print("clientMid chat send error: " .. tostring(err)) end
+    end
+    local function sendWhisperMessage(text)
+        local ch = getChannelByName("RBXWhisper")
+        if not ch then
+            addSystemChatMessage("Whispers aren't available on this client.", false)
+            return
+        end
+        local ok, err = pcall(function() return ch:SendAsync(text, "") end)
+        if not ok then print("clientMid chat send error: " .. tostring(err)) end
+    end
+
+    local function sanitizeInput(input)
+        local _, _, cleaned = string.find(input or "", "^%s*(.*)%s*$")
+        return cleaned or ""
+    end
+
+    local commandsWindow = Instance.new("Frame")
+    commandsWindow.Name = "ChatCommandsWindow"
+    commandsWindow.Size = UDim2.new(0, 340, 0, 180)
+    commandsWindow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    commandsWindow.AnchorPoint = Vector2.new(0.5, 0.5)
+    commandsWindow.Active = true
+    commandsWindow.BackgroundColor3 = Color3.new(0, 0, 0)
+    commandsWindow.BackgroundTransparency = 0.5
+    commandsWindow.BorderSizePixel = 0
+    commandsWindow.ZIndex = 0
+    commandsWindow.Visible = false
+    commandsWindow.Parent = screenGui
+
+    local cmdTitle = Instance.new("TextLabel")
+    cmdTitle.Name = "Title"
+    cmdTitle.Size = UDim2.new(1, -20, 0, 28)
+    cmdTitle.Position = UDim2.new(0, 10, 0, 6)
+    cmdTitle.BackgroundTransparency = 1
+    cmdTitle.Text = "Chat Comamnds"
+    cmdTitle.TextColor3 = chatSettings.DefaultMessageTextColor
+    cmdTitle.Font = Enum.Font.SourceSansBold
+    cmdTitle.FontSize = Enum.FontSize.Size18
+    cmdTitle.TextXAlignment = Enum.TextXAlignment.Left
+    cmdTitle.TextStrokeColor3 = chatSettings.TextStrokeColor
+    cmdTitle.TextStrokeTransparency = chatSettings.TextStrokeTransparency
+    cmdTitle.Parent = commandsWindow
+
+    local closeX = Instance.new("TextButton")
+    closeX.Name = "CloseButton"
+    closeX.Size = UDim2.new(0, 24, 0, 24)
+    closeX.Position = UDim2.new(1, -5, 0, 4)
+    closeX.AnchorPoint = Vector2.new(1, 0)
+    closeX.ZIndex = 9
+    closeX.BackgroundTransparency = 1
+    local closeXCorner = Instance.new("UICorner")
+    closeXCorner.CornerRadius = UDim.new(1, 0)
+    closeXCorner.Parent = closeX
+    closeX.Text = "×"
+    closeX.TextColor3 = Color3.new(1, 1, 1)
+    closeX.TextSize = 18
+    closeX.Font = Enum.Font.SourceSans
+    closeX.TextStrokeColor3 = chatSettings.TextStrokeColor
+    closeX.TextStrokeTransparency = 0.5
+    closeX.Parent = commandsWindow
+    conn(closeX.MouseEnter, function()
+        closeX.BackgroundTransparency = 0.8
+        closeX.BackgroundColor3 = Color3.new(1, 1, 1)
+    end)
+    conn(closeX.MouseLeave, function() closeX.BackgroundTransparency = 1 end)
+    conn(closeX.MouseButton1Click, function() commandsWindow.Visible = false end)
+
+    local cmdList = Instance.new("Frame")
+    cmdList.Name = "CommandList"
+    cmdList.Position = UDim2.new(0, 10, 0, 38)
+    cmdList.Size = UDim2.new(1, -20, 1, -48)
+    cmdList.BackgroundTransparency = 1
+    cmdList.ZIndex = 8
+    cmdList.Parent = commandsWindow
+
+    local cmdLayout = Instance.new("UIListLayout")
+    cmdLayout.Padding = UDim.new(0, 4)
+    cmdLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    cmdLayout.Parent = cmdList
+
+    local cmdEntries =
+    {
+        {'/w <name> <text>          -- whisper', chatSettings.WhisperTextColor},
+        {'% <text> or /team <text>  -- team chat', chatSettings.TeamTextColor},
+        {'/a, /all, /s, /say <text> -- all chat', chatSettings.GlobalTextColor},
+        {'/e <text>                 -- emote', chatSettings.GlobalTextColor},
+        {'/? or /help               -- show this list', chatSettings.DefaultMessageTextColor},
+    }
+    for _, cmdEntry in ipairs(cmdEntries) do
+        local row = Instance.new("TextLabel")
+        row.Size = UDim2.new(1, 0, 0, 20)
+        row.BackgroundTransparency = 1
+        row.Text = cmdEntry[1]
+        row.TextColor3 = cmdEntry[2]
+        row.Font = chatSettings.Font
+        row.FontSize = chatSettings.FontSize
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.TextYAlignment = Enum.TextYAlignment.Top
+        row.TextStrokeColor3 = chatSettings.TextStrokeColor
+        row.TextStrokeTransparency = chatSettings.TextStrokeTransparency
+        row.Parent = cmdList
+    end
+
+    local function showChatCommands()
+        commandsWindow.Visible = true
+    end
+
+    local function nocase(s)
+        return string.gsub(s, "%a", function(c)
+            return string.format("[%s%s]", string.lower(c), string.upper(c))
+        end)
+    end
+
+    local chatMatchingRegex =
+    {
+        {pattern = nocase("^/w ") .. "(%w+_?%w+)", action = "Whisper"},
+        {pattern = nocase("^/whisper ") .. "(%w+_?%w+)", action = "Whisper"},
+        {pattern = nocase("^/t"), action = "Team"},
+        {pattern = nocase("^/team"), action = "Team"},
+        {pattern = "^%%", action = "Team"},
+        {pattern = "^%(TEAM%)", action = "Team"},
+        {pattern = nocase("^/a"), action = "All"},
+        {pattern = nocase("^/all"), action = "All"},
+        {pattern = nocase("^/s"), action = "All"},
+        {pattern = nocase("^/say"), action = "All"},
+        {pattern = nocase("^/e"), action = "Emote"},
+        {pattern = nocase("^/emote"), action = "Emote"},
+        {pattern = "^/%?", action = "Help"},
+        {pattern = nocase("^/help"), action = "Help"},
+    }
+
+    local chatModesDict = {['Whisper'] = true, ['Team'] = true, ['All'] = true}
+
+    local function setMessageMode(newMode)
+        if not chatModesDict[newMode] then return end
+        if messageMode == newMode and newMode ~= 'Whisper' then return end
+        messageMode = newMode
+        if newMode == 'Whisper' then
+            local chatRecipientText = "[" .. (targetWhisperPlayer and targetWhisperPlayer.Name or "") .. "]"
+            local chatRecipientTextBounds = stringTextBounds(chatRecipientText, chatModeText.Font, chatModeText.FontSize)
+            chatModeText.TextColor3 = chatSettings.WhisperTextColor
+            chatModeText.Text = chatRecipientText
+            chatModeText.Size = UDim2.new(0, chatRecipientTextBounds.X, 1, 0)
+        elseif newMode == 'Team' then
+            local chatTeamTextBounds = stringTextBounds('[Team]', chatModeText.Font, chatModeText.FontSize)
+            chatModeText.TextColor3 = chatSettings.TeamTextColor
+            chatModeText.Text = "[Team]"
+            chatModeText.Size = UDim2.new(0, chatTeamTextBounds.X, 1, 0)
+        else
+            chatModeText.Text = ""
+            chatModeText.Size = UDim2.new(0, 0, 1, 0)
+        end
+        local offset = chatModeText.Size.X.Offset + chatModeText.Position.X.Offset
+        chatTextBox.Size = UDim2.new(1, -14 - offset, 1, 0)
+        chatTextBox.Position = UDim2.new(0, 7 + offset, 0, 0)
+    end
+
+    local function processChatBarModes(requireWhitespaceAfterChatMode)
+        local matchedAChatCommand = false
+        if chatTextBox then
+            local chatBarText = sanitizeInput(chatTextBox.Text)
+            for _, entry in ipairs(chatMatchingRegex) do
+                local start, finish, capture = string.find(chatBarText, entry.pattern)
+                if start and finish then
+                    local whitespaceAfterSlashCommand = string.find(string.sub(chatBarText, finish + 1, finish + 1), "%s")
+                    if (not requireWhitespaceAfterChatMode and finish == #chatBarText) or whitespaceAfterSlashCommand then
+                        local actionType = entry.action
+                        if chatModesDict[actionType] then
+                            if actionType == "Whisper" then
+                                local targetPlayer = capture and Players:FindFirstChild(capture)
+                                if targetPlayer then
+                                    targetWhisperPlayer = targetPlayer
+                                    chatTextBox.Text = string.sub(chatBarText, finish + 2)
+                                    setMessageMode(actionType)
+                                else
+                                    if not requireWhitespaceAfterChatMode then
+                                        chatTextBox.Text = ""
+                                    end
+                                end
+                            else
+                                chatTextBox.Text = string.sub(chatBarText, finish + 2)
+                                setMessageMode(actionType)
+                            end
+                        elseif actionType == "Emote" then
+                            setMessageMode('All')
+                        elseif not requireWhitespaceAfterChatMode then
+                            if actionType == "Help" then
+                                chatTextBox.Text = ""
+                                showChatCommands()
+                            end
+                        end
+                        matchedAChatCommand = true
+                    end
+                end
+            end
+        end
+        return matchedAChatCommand
+    end
+
+    local function onChatBarTextChanged()
+        if consumeToggleChar then
+            consumeToggleChar = false
+            local t = chatTextBox.Text
+            local first = string.sub(t, 1, 1)
+            if first == ";" then
+                chatTextBox.Text = string.sub(t, 2)
+                return
+            elseif first == "/" and #t <= 1 then
+                chatTextBox.Text = ""
+                return
+            end
+        end
+        processChatBarModes(true)
+        local current = chatTextBox.Text
+        if #current > chatSettings.MaxCharactersInMessage then
+            chatTextBox.Text = string.sub(current, 1, chatSettings.MaxCharactersInMessage)
+        end
+    end
+
+    local function updateChatBarBounds()
+        if not chatTextBox or not chatTextBox.Visible then return end
+        local by = chatTextBox.TextBounds and chatTextBox.TextBounds.Y or 0
+        local fits = chatTextBox.TextFits
+        if fits ~= nil and not fits then
+            if by <= 36 then setBarSize(58) else setBarSize(76) end
+        elseif by <= 18 then
+            if chatBar.Size.Y.Offset ~= 40 then setBarSize(40) end
+        elseif by <= 36 then
+            setBarSize(58)
+        end
+    end
+
+    local function onChatBarFocusLost(enter)
+        chatBarFocused = false
+        FadeLock = false
+        consumeToggleChar = false
+        setBarSize(32)
+        if enter then
+            processChatBarModes(false)
+            local cText = sanitizeInput(chatTextBox.Text)
+            if string.sub(cText, 1, 1) == ";" then cText = string.sub(cText, 2) end
+            if cText ~= "" then
+                if messageMode == 'Team' then
+                    sendTeamMessage(cText)
+                elseif messageMode == 'Whisper' then
+                    if targetWhisperPlayer then
+                        if targetWhisperPlayer == Player then
+                            addSystemChatMessage("You cannot send a whisper to yourself.", false)
+                        else
+                            sendWhisperMessage(cText)
+                        end
+                    else
+                        addSystemChatMessage("Invalid whisper target.", false)
+                    end
+                else
+                    sendChatMessage(cText)
+                end
+            end
+        end
+        setBarVisible(false)
+        chatTextBox.Text = ""
+        targetWhisperPlayer = nil
+        setMessageMode('All')
+        if G.clientMid and G.clientMid.Chat and G.clientMid.Chat.setOpen then
+            G.clientMid.Chat.setOpen(chatVisible)
+        end
+        lastChatActivity = tick()
+    end
+
+    conn(clickToChat.Activated, function() focusChat() end)
+    conn(uis.InputBegan, function(inp, gpe)
+        if gpe then return end
+        if inp.UserInputType == Enum.UserInputType.Keyboard then
+            if inp.KeyCode == Enum.KeyCode.Slash or inp.KeyCode == Enum.KeyCode.Semicolon then
+                focusChat()
+                chatTextBox.Text = ""
+                consumeToggleChar = true
+            elseif inp.KeyCode == Enum.KeyCode.Escape then
+                if chatTextBox:IsFocused() then chatTextBox:ReleaseFocus() end
+            end
+        end
+    end)
+    conn(chatTextBox.FocusLost, function(enter) onChatBarFocusLost(enter) end)
+    conn(chatTextBox:GetPropertyChangedSignal("Text"), onChatBarTextChanged)
+    conn(chatTextBox.Changed, function(prop)
+        if prop == 'TextBounds' or prop == 'TextFits' or prop == 'Visible' then
+            updateChatBarBounds()
+        end
+    end)
+
+    -- fade / hover behaviour (desktop, faithful to source)
+    conn(uis.InputChanged, function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseMovement then
+            lastMoveTime = tick()
+            lastMousePos = Vector2.new(inp.Position.X, inp.Position.Y)
+            if backgroundTweener and backgroundTweener:GetPercentComplete() < 0.5 and BackgroundVisible then
+                if not dontFadeOutOnMouseLeave and not isHovering() then fadeOut() end
+            end
+        end
+    end)
+    conn(uis.InputBegan, function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 and inp.UserInputState == Enum.UserInputState.Begin then
+            if pointInChatWindow(Vector2.new(inp.Position.X, inp.Position.Y)) then
+                clickCount = clickCount + 1
+                dontFadeOutOnMouseLeave = true
+            end
+        end
+    end)
+    conn(uis.InputEnded, function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 and inp.UserInputState == Enum.UserInputState.End then
+            local cur = clickCount
+            delay(1.3, function() if cur == clickCount then dontFadeOutOnMouseLeave = false end end)
+        end
+    end)
+    conn(chatContainer.MouseEnter, function()
+        lastEnterTime = tick()
+        if backgroundTweener and not backgroundTweener:IsFinished() and not BackgroundVisible then fadeIn() end
+    end)
+    conn(chatContainer.MouseLeave, function()
+        lastLeaveTime = tick()
+        if backgroundTweener and not backgroundTweener:IsFinished() and BackgroundVisible then
+            if not dontFadeOutOnMouseLeave and not isHovering() then fadeOut() end
+        end
+    end)
+
+    coroutine.wrap(function()
+        while true do
+            RunService.Heartbeat:Wait()
+            local now = tick()
+            if isHovering() then
+                if now - lastMoveTime > 1.3 and not BackgroundVisible then fadeIn() end
+            else
+                if BackgroundVisible then
+                    if not dontFadeOutOnMouseLeave then fadeOut(0.25) end
+                elseif ChatsVisible and now > lastChatActivity + MESSAGES_FADE_OUT_TIME then
+                    fadeOutChats()
+                end
+            end
+        end
+    end)()
+
+    local chatGear = Instance.new("ImageButton")
+    chatGear.Name = "ChatGear"
+    chatGear.Size = UDim2.new(0, 22, 0, 22)
+    chatGear.Position = UDim2.new(1, -26, 0, 2)
+    chatGear.AnchorPoint = Vector2.new(0, 0)
+    chatGear.ZIndex = 5
+    chatGear.BackgroundTransparency = 1
+    chatGear.Image = config.Assets.ChatGear
+    chatGear.ImageTransparency = 0
+    chatGear.Parent = chatContainer
+
+    local gearMenu = Instance.new("Frame")
+    gearMenu.Name = "ChatGearMenu"
+    gearMenu.Size = UDim2.new(0, 170, 0, 76)
+    gearMenu.Position = UDim2.new(1, 6, 0, 0)
+    gearMenu.BackgroundColor3 = Color3.new(31 / 255, 31 / 255, 31 / 255)
+    gearMenu.BackgroundTransparency = 0.5
+    gearMenu.BorderSizePixel = 0
+    gearMenu.ZIndex = 6
+    gearMenu.Visible = false
+    gearMenu.Parent = chatGear
+
+local function gearOption(text, y, h)
+    local b = Instance.new("TextButton")
+    b.Text = text
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.TextSize = 15
+    b.Font = Enum.Font.SourceSans
+    b.BackgroundColor3 = Color3.new(31 / 255, 31 / 255, 31 / 255)
+    b.BackgroundTransparency = 0.5
+    b.BorderSizePixel = 0
+    b.Position = UDim2.new(0, 6, 0, y)
+    b.Size = UDim2.new(1, -12, 0, h)
+    b.ZIndex = 6
+    b.TextXAlignment = Enum.TextXAlignment.Left
+
+    conn(b.MouseEnter, function()
+        b.BackgroundColor3 = Color3.new(78 / 255, 84 / 255, 96 / 255)
+        b.BackgroundTransparency = 0.5
+    end)
+
+    conn(b.MouseLeave, function()
+        b.BackgroundColor3 = Color3.new(31 / 255, 31 / 255, 31 / 255)
+        b.BackgroundTransparency = 0.5
+    end)
+
+    b.Parent = gearMenu
+    return b
+end
+
+local resizeOption = gearOption("Resize Chat", 4, 30)
+local modesOption = gearOption("Modes", 38, 30)
+
+    local modesMenu = Instance.new("Frame")
+    modesMenu.Name = "ChatGearModes"
+    modesMenu.Size = UDim2.new(0, 90, 0, 64)
+    modesMenu.Position = UDim2.new(1, 2, 0, 0)
+    modesMenu.BackgroundColor3 = Color3.new(31 / 255, 31 / 255, 31 / 255)
+    modesMenu.BackgroundTransparency = 0.5
+    modesMenu.BorderSizePixel = 0
+    modesMenu.ZIndex = 7
+    modesMenu.Visible = false
+    modesMenu.Parent = gearMenu
+
+    local function modeItem(text, y)
+        local b = Instance.new("TextButton")
+        b.Text = text
+        b.TextColor3 = Color3.new(1, 1, 1)
+        b.TextSize = 15
+        b.Font = Enum.Font.SourceSans
+        b.BackgroundColor3 = Color3.new(31 / 255, 31 / 255, 31 / 255)
+        b.BackgroundTransparency = 0.5
+        b.BorderSizePixel = 0
+        b.Position = UDim2.new(0, 6, 0, y)
+        b.Size = UDim2.new(1, -12, 0, 26)
+        b.ZIndex = 7
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        conn(b.MouseEnter, function() b.BackgroundColor3 = Color3.new(78 / 255, 84 / 255, 96 / 255) end)
+        conn(b.MouseLeave, function() b.BackgroundColor3 = Color3.new(31 / 255, 31 / 255, 31 / 255) end)
+        b.Parent = modesMenu
+        return b
+    end
+
+    local localMode = modeItem("Local", 4)
+    local globalMode = modeItem("Global", 34)
+    local chatMode = "Global"
+
+    local function setChatMode(m)
+        chatMode = m
+    end
+    conn(localMode.MouseButton1Click, function() setChatMode("Local"); modesMenu.Visible = false end)
+    conn(globalMode.MouseButton1Click, function() setChatMode("Global"); modesMenu.Visible = false end)
+
+    conn(modesOption.MouseButton1Click, function()
+        modesMenu.Visible = not modesMenu.Visible
+    end)
+
+    local function closeGearMenus()
+        gearMenu.Visible = false
+        modesMenu.Visible = false
+    end
+
+    conn(chatGear.MouseButton1Click, function()
+        gearMenu.Visible = not gearMenu.Visible
+        modesMenu.Visible = false
+    end)
+
+    -- resize mode: drag with mouse to resize chat window, end on Q or click
+    local resizeActive = false
+    local mouse = Player:GetMouse()
+
+    local function setResizeCursor(on)
+        pcall(function()
+            if on then
+                uis.MouseIconEnabled = false
+                mouse.Icon = config.Assets.ChatResizeCursor or "rbxassetid://90033267536542"
+            else
+                uis.MouseIconEnabled = true
+                mouse.Icon = ""
+            end
+        end)
+    end
+
+    local function startResize()
+        closeGearMenus()
+        resizeActive = true
+        setResizeCursor(true)
+    end
+
+    local function stopResize()
+        if not resizeActive then return end
+        resizeActive = false
+        setResizeCursor(false)
+        pcall(function()
+            tmpSet("chatW", chatContainer.Size.X.Offset)
+            tmpSet("chatH", chatContainer.Size.Y.Offset)
+            tmpSet("chatBarY", chatBar.Position.Y.Offset)
+        end)
+    end
+
+    conn(resizeOption.MouseButton1Click, function()
+        startResize()
+    end)
+
+    conn(uis.InputChanged, function(inp)
+        if inp.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+        if resizeActive then
+            local x = inp.Position.X
+            local y = inp.Position.Y
+            local w = math.max(150, x - chatContainer.AbsolutePosition.X)
+            local h = math.max(80, y - chatContainer.AbsolutePosition.Y)
+            chatContainer.Size = UDim2.new(0, w, 0, h)
+            local barH = chatBar.Size.Y.Offset
+            chatBar.Position = UDim2.new(chatBar.Position.X.Scale, chatBar.Position.X.Offset, 0, chatContainer.Position.Y.Offset + h + 2)
+            chatBar.Size = UDim2.new(0, w, 0, barH)
+        end
+    end)
+
+    conn(uis.InputBegan, function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 and inp.UserInputState == Enum.UserInputState.Begin then
+            if resizeActive then
+                stopResize()
+            end
+        end
+    end)
+
+    -- restore persisted chat size from tmp file (only if resized before)
+    local savedW = tonumber(tmpGet("chatW"))
+    local savedH = tonumber(tmpGet("chatH"))
+    local savedBarY = tonumber(tmpGet("chatBarY"))
+    if savedW and savedH and savedW > 150 and savedH > 80 then
+        chatContainer.Size = UDim2.new(0, savedW, 0, savedH)
+        chatBar.Position = UDim2.new(chatBar.Position.X.Scale, chatBar.Position.X.Offset, 0, savedBarY or chatContainer.Position.Y.Offset + savedH + 2)
+        chatBar.Size = UDim2.new(0, savedW, 0, chatBar.Size.Y.Offset)
+    end
+
+    -- initial state: chat is visible (matches 2016 desktop ToggleVisibility(true)),
+    -- window fades in and stays for 5s via FadeLock
+    chatContainer.Visible = chatVisible
+    chatBar.Visible = chatVisible
+    updateIcon(chatVisible)
+    FadeLock = true
+    fadeIn(0)
+    delay(5, function() FadeLock = false end)
+
+    -- =================================================================
+    -- TextChatService wiring (incoming + outgoing)
+    -- =================================================================
+    local function getPlayerFromTextSource(ts)
+        if ts and ts.UserId then return Players:GetPlayerByUserId(ts.UserId) end
+    end
+
+    -- outgoing: when the local player sends, TextChatService refires to everyone
+    -- including the sender. We push it through the standard path.
+    conn(TCS.MessageReceived, function(msg)
+        if not chatVisible then return end
+        if G.clientMidRun ~= runId then return end
+        local ts = msg.TextSource
+        if not ts then
+            if msg.Text and msg.Text ~= "" then addSystemChatMessage(msg.Text, true) end
+            return
+        end
+        local sender = getPlayerFromTextSource(ts)
+        if not sender then return end
+        if sender == Player and wasSent(msg.Text) then return end
+        addChatMessage(Enum.PlayerChatType.All, sender, msg.Text)
+    end)
+
+    local toggleCount = 0
+    local function setChatOpen(open)
+        open = open == true
+        chatVisible = open
+
+        if open then
+            chatContainer.Visible = true
+            chatBar.Visible = true
+            toggleCount = toggleCount + 1
+            local thisToggle = toggleCount
+            fadeIn(0.25)
+            FadeLock = true
+            delay(5, function()
+                if thisToggle == toggleCount then
+                    FadeLock = false
+                end
+            end)
+        else
+            chatContainer.Visible = false
+            chatBar.Visible = false
+            if chatTextBox:IsFocused() then
+                chatTextBox:ReleaseFocus()
+            end
+            chatBarFocused = false
+            FadeLock = false
+            if stopResize then stopResize() end
+        end
+
+        updateIcon(open)
+    end
+
+    if config.ChatToggle.Enabled then
+        local UIS = game:GetService("UserInputService")
+        local chatHidden = false
+
+        local function applyChatHidden()
+            chatIconButton.Visible = not chatHidden
+            chatContainer.Visible = not chatHidden
+            chatBar.Visible = not chatHidden
+            if chatHidden and stopResize then stopResize() end
+            layoutTopbarIcons()
+        end
+
+        UIS.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if input.KeyCode ~= config.ChatToggle.KeyCode then return end
+            if not (UIS:IsKeyDown(Enum.KeyCode.LeftAlt)
+                or UIS:IsKeyDown(Enum.KeyCode.RightAlt)) then return end
+            chatHidden = not chatHidden
+            applyChatHidden()
+        end)
+    end
+
+    if G.clientMid and G.clientMid.Chat then
+        G.clientMid.Chat.focus = focusChat
+        G.clientMid.Chat.toggle = function()
+            setChatOpen(not chatVisible)
+        end
+    end
+    end
+    initChat()
+end
+
+-- Backpack (ported from content/scripts/Modules/BackpackScript.lua v4.21)
+if not dis("Backpack") then
+local function initBackpack()
+    local BP = G.clientMid.Backpack -- Exposed API table (holds StateChanged BindableEvent)
+
+    -- Configurables
+    local ICON_SIZE = 60
+    local FONT_SIZE = Enum.FontSize.Size14
+    local ICON_BUFFER = 5
+
+    local BACKGROUND_FADE = 0.50
+    local BACKGROUND_COLOR = Color3.new(31/255, 31/255, 31/255)
+
+    local SLOT_DRAGGABLE_COLOR = Color3.new(49/255, 49/255, 49/255)
+    local SLOT_EQUIP_COLOR = Color3.new(90/255, 142/255, 233/255)
+    local SLOT_EQUIP_THICKNESS = 0.1 -- Relative
+    local SLOT_FADE_LOCKED = 0.50 -- Locked means undraggable
+    local SLOT_BORDER_COLOR = Color3.new(1, 1, 1) -- Appears when dragging
+
+    local TOOLTIP_BUFFER = 6
+    local TOOLTIP_HEIGHT = 16
+    local TOOLTIP_OFFSET = -25 -- From top
+
+    local ARROW_IMAGE_OPEN = 'rbxasset://textures/ui/Backpack_Open.png'
+    local ARROW_IMAGE_CLOSE = 'rbxasset://textures/ui/Backpack_Close.png'
+    local ARROW_SIZE = UDim2.new(0, 14, 0, 9)
+    local ARROW_HOTKEY = Enum.KeyCode.Backquote.Value --TODO: Hookup '~' too?
+    local ARROW_HOTKEY_STRING = '`'
+
+    local HOTBAR_SLOTS_FULL = 10
+    local HOTBAR_SLOTS_MINI = 3
+    local HOTBAR_SLOTS_WIDTH_CUTOFF = 1024 -- Anything smaller is MINI
+    local HOTBAR_OFFSET_FROMBOTTOM = -30 -- Offset to make room for the Health GUI
+
+    local INVENTORY_ROWS_FULL = 4
+    local INVENTORY_ROWS_MINI = 2
+    local INVENTORY_HEADER_SIZE = 40
+
+    local SEARCH_BUFFER = 5
+    local SEARCH_WIDTH = 200
+    local SEARCH_TEXT = "   Search"
+    local SEARCH_TEXT_OFFSET_FROMLEFT = 0
+    local SEARCH_BACKGROUND_COLOR = Color3.new(0.37, 0.37, 0.37)
+    local SEARCH_BACKGROUND_FADE = 0.15
+
+    local DOUBLE_CLICK_TIME = 0.5
+
+    -- Variables
+    local GuiService = game:GetService('GuiService')
+    local ContextActionService = game:GetService('ContextActionService')
+    local isTenFootInterface = false
+
+    local gamepadActionsBound = false
+
+    local IS_PHONE = uis.TouchEnabled and GuiService:GetScreenResolution().X < HOTBAR_SLOTS_WIDTH_CUTOFF
+
+    local HOTBAR_SLOTS = (IS_PHONE) and HOTBAR_SLOTS_MINI or HOTBAR_SLOTS_FULL
+    local HOTBAR_SIZE = UDim2.new(0, ICON_BUFFER + (HOTBAR_SLOTS * (ICON_SIZE + ICON_BUFFER)), 0, ICON_BUFFER + ICON_SIZE + ICON_BUFFER)
+    local ZERO_KEY_VALUE = Enum.KeyCode.Zero.Value
+    local DROP_HOTKEY_VALUE = Enum.KeyCode.Backspace.Value
+    local INVENTORY_ROWS = (IS_PHONE) and INVENTORY_ROWS_MINI or INVENTORY_ROWS_FULL
+
+    local MainFrame = nil
+    local HotbarFrame = nil
+    local InventoryFrame = nil
+    local ScrollingFrame = nil
+
+    local Character = nil
+    local Humanoid = nil
+    local Backpack = nil
+
+    local Slots = {} -- List of all Slots by index
+    local LowestEmptySlot = nil
+    local SlotsByTool = {} -- Map of Tools to their assigned Slots
+    local HotkeyFns = {} -- Map of KeyCode values to their assigned behaviors
+    local Dragging = {} -- Only used to check if anything is being dragged, to disable other input
+    local FullHotbarSlots = 0
+    local UpdateArrowFrame = nil -- Function defined in arrow init logic at bottom
+    local ActiveHopper = nil --NOTE: HopperBin
+    local StarterToolFound = false -- Special handling is required for the gear currently equipped on the site
+    local WholeThingEnabled = false
+    local TextBoxFocused = false -- ANY TextBox, not just the search box
+    local ResultsIndices = nil -- Results of a search, or nil
+    local CharConns = {} -- Holds character connections to be cleared later
+    local TopBarEnabled = true
+    local GamepadEnabled = false -- determines if our gui needs to be gamepad friendly
+
+    local lastEquippedSlot = nil
+    local changeSlot -- Forward declaration (assigned further down)
+
+    local function xnew(class, props)
+        local obj = Instance.new(class)
+        for k, v in pairs(props) do
+            obj[k] = v
+        end
+        return obj
+    end
+
+    -- Functions
+    local function NewGui(className, objectName)
+        local newGui = Instance.new(className)
+        newGui.Name = objectName
+        newGui.BackgroundColor3 = Color3.new(0, 0, 0)
+        newGui.BackgroundTransparency = 1
+        newGui.BorderColor3 = Color3.new(0, 0, 0)
+        newGui.BorderSizePixel = 0
+        newGui.Size = UDim2.new(1, 0, 1, 0)
+        if className:match('Text') then
+            newGui.TextColor3 = Color3.new(1, 1, 1)
+            newGui.Text = ''
+            newGui.Font = Enum.Font.SourceSans
+            newGui.FontSize = FONT_SIZE
+            newGui.TextWrapped = true
+            if className == 'TextButton' then
+                newGui.Font = Enum.Font.SourceSansBold
+                newGui.BorderSizePixel = 1
+            end
+        end
+        return newGui
+    end
+
+    local function FindLowestEmpty()
+        for i = 1, HOTBAR_SLOTS do
+            local slot = Slots[i]
+            if not slot.Tool then
+                return slot
+            end
+        end
+        return nil
+    end
+
+    local function AdjustHotbarFrames()
+        local inventoryOpen = InventoryFrame.Visible -- (Show all)
+        local visualTotal = (inventoryOpen) and HOTBAR_SLOTS or FullHotbarSlots
+        local visualIndex = 0
+        for i = 1, HOTBAR_SLOTS do
+            local slot = Slots[i]
+            if slot.Tool or inventoryOpen then
+                visualIndex = visualIndex + 1
+                slot:Readjust(visualIndex, visualTotal)
+                slot.Frame.Visible = true
+            else
+                slot.Frame.Visible = false
+            end
+        end
+    end
+
+    local function CheckBounds(guiObject, x, y)
+        local pos = guiObject.AbsolutePosition
+        local size = guiObject.AbsoluteSize
+        return (x > pos.X and x <= pos.X + size.X and y > pos.Y and y <= pos.Y + size.Y)
+    end
+
+    local function GetOffset(guiObject, point)
+        local centerPoint = guiObject.AbsolutePosition + (guiObject.AbsoluteSize / 2)
+        return (centerPoint - point).magnitude
+    end
+
+    local function DisableActiveHopper() --NOTE: HopperBin
+        ActiveHopper:ToggleSelect()
+        SlotsByTool[ActiveHopper]:UpdateEquipView()
+        ActiveHopper = nil
+    end
+
+    local function UnequipAllTools() --NOTE: HopperBin
+        if Humanoid then
+            Humanoid:UnequipTools()
+            if ActiveHopper then
+                DisableActiveHopper()
+            end
+        end
+    end
+
+    local function EquipNewTool(tool) --NOTE: HopperBin
+        UnequipAllTools()
+        if tool:IsA('HopperBin') then
+            tool:ToggleSelect()
+            SlotsByTool[tool]:UpdateEquipView()
+            ActiveHopper = tool
+        else
+            --Humanoid:EquipTool(tool) --NOTE: This would also unequip current Tool
+            tool.Parent = Character --TODO: Switch back to above line after EquipTool is fixed!
+        end
+    end
+
+    local function IsEquipped(tool)
+        return tool and ((tool:IsA('HopperBin') and tool.Active) or tool.Parent == Character) --NOTE: HopperBin
+    end
+
+    local function MakeSlot(parent, index)
+        index = index or (#Slots + 1)
+
+        -- Slot Definition --
+
+        local slot = {}
+        slot.Tool = nil
+        slot.Index = index
+        slot.Frame = nil
+
+        local SlotFrame = nil
+        local ToolIcon = nil
+        local ToolName = nil
+        local ToolChangeConn = nil
+        local HighlightFrame = nil
+
+        --NOTE: The following are only defined for Hotbar Slots
+        local ToolTip = nil
+        local SlotNumber = nil
+
+        -- Slot Functions --
+
+        local function UpdateSlotFading()
+            SlotFrame.BackgroundTransparency = (SlotFrame.Draggable) and 0 or SLOT_FADE_LOCKED
+            SlotFrame.BackgroundColor3 = (SlotFrame.Draggable) and SLOT_DRAGGABLE_COLOR or BACKGROUND_COLOR
+        end
+
+        function slot:Reposition()
+            -- Slots are positioned into rows
+            local index = (ResultsIndices and ResultsIndices[self]) or self.Index
+            local sizePlus = ICON_BUFFER + ICON_SIZE
+
+            local modSlots = 0
+            modSlots = ((index - 1) % HOTBAR_SLOTS) + 1
+
+            local row = 0
+            row = (index > HOTBAR_SLOTS) and (math.floor((index - 1) / HOTBAR_SLOTS)) - 1 or 0
+
+            SlotFrame.Position = UDim2.new(0, ICON_BUFFER + ((modSlots - 1) * sizePlus), 0, ICON_BUFFER + (sizePlus * row))
+        end
+
+        function slot:Readjust(visualIndex, visualTotal) --NOTE: Only used for Hotbar slots
+            local centered = HOTBAR_SIZE.X.Offset / 2
+            local sizePlus = ICON_BUFFER + ICON_SIZE
+            local midpointish = (visualTotal / 2) + 0.5
+            local factor = visualIndex - midpointish
+            SlotFrame.Position = UDim2.new(0, centered - (ICON_SIZE / 2) + (sizePlus * factor), 0, ICON_BUFFER)
+        end
+
+        function slot:Fill(tool)
+            if not tool then
+                return self:Clear()
+            end
+
+            self.Tool = tool
+
+            local function assignToolData()
+                local icon = tool.TextureId
+                ToolIcon.Image = icon
+                ToolName.Text = (icon == '') and tool.Name or '' -- (Only show name if no icon)
+                if ToolTip and tool:IsA('Tool') then --NOTE: HopperBin
+                    ToolTip.Text = tool.ToolTip
+                    local width = ToolTip.TextBounds.X + TOOLTIP_BUFFER
+                    ToolTip.Size = UDim2.new(0, width, 0, TOOLTIP_HEIGHT)
+                    ToolTip.Position = UDim2.new(0.5, -width / 2, 0, TOOLTIP_OFFSET)
+                end
+            end
+            assignToolData()
+
+            if ToolChangeConn then
+                for i = #ToolChangeConn, 1, -1 do
+                    if ToolChangeConn[i].Disconnect then
+                        ToolChangeConn[i]:Disconnect()
+                    end
+                end
+                ToolChangeConn = nil
+            end
+
+            ToolChangeConn = {}
+            ToolChangeConn[#ToolChangeConn + 1] = conn(tool:GetPropertyChangedSignal('TextureId'), assignToolData)
+            ToolChangeConn[#ToolChangeConn + 1] = conn(tool:GetPropertyChangedSignal('Name'), assignToolData)
+            ToolChangeConn[#ToolChangeConn + 1] = conn(tool:GetPropertyChangedSignal('ToolTip'), assignToolData)
+
+            local hotbarSlot = (self.Index <= HOTBAR_SLOTS)
+            local inventoryOpen = InventoryFrame.Visible
+
+            if not hotbarSlot or inventoryOpen then
+                SlotFrame.Draggable = true
+            end
+
+            self:UpdateEquipView()
+
+            if hotbarSlot then
+                FullHotbarSlots = FullHotbarSlots + 1
+            end
+
+            SlotsByTool[tool] = self
+            LowestEmptySlot = FindLowestEmpty()
+            UpdateArrowFrame()
+        end
+
+        function slot:Clear()
+            if not self.Tool then return end
+
+            if ToolChangeConn then
+                for i = #ToolChangeConn, 1, -1 do
+                    if ToolChangeConn[i].Disconnect then
+                        ToolChangeConn[i]:Disconnect()
+                    end
+                end
+                ToolChangeConn = nil
+            end
+
+            ToolIcon.Image = ''
+            ToolName.Text = ''
+            if ToolTip then
+                ToolTip.Text = ''
+                ToolTip.Visible = false
+            end
+            SlotFrame.Draggable = false
+
+            self:UpdateEquipView(true) -- Show as unequipped
+
+            if self.Index <= HOTBAR_SLOTS then
+                FullHotbarSlots = FullHotbarSlots - 1
+            end
+
+            SlotsByTool[self.Tool] = nil
+            self.Tool = nil
+            LowestEmptySlot = FindLowestEmpty()
+            UpdateArrowFrame()
+        end
+
+        function slot:UpdateEquipView(unequippedOverride)
+            if not unequippedOverride and IsEquipped(self.Tool) then -- Equipped
+                lastEquippedSlot = slot
+                if not HighlightFrame then
+                    HighlightFrame = NewGui('Frame', 'Equipped')
+                    HighlightFrame.ZIndex = SlotFrame.ZIndex
+                    local t = SLOT_EQUIP_THICKNESS
+                    local dataTable = { -- Relative sizes and positions
+                        {t, 1, 0, 0},
+                        {1, t, 0, 0},
+                        {t, 1, 1 - t, 0},
+                        {1, t, 0, 1 - t},
+                    }
+                    for _, data in pairs(dataTable) do
+                        local edgeFrame = NewGui('Frame', 'Edge')
+                        edgeFrame.BackgroundTransparency = 0
+                        edgeFrame.BackgroundColor3 = SLOT_EQUIP_COLOR
+                        edgeFrame.Size = UDim2.new(data[1], 0, data[2], 0)
+                        edgeFrame.Position = UDim2.new(data[3], 0, data[4], 0)
+                        edgeFrame.ZIndex = HighlightFrame.ZIndex
+                        edgeFrame.Parent = HighlightFrame
+                    end
+                end
+                HighlightFrame.Parent = SlotFrame
+            else -- In the Backpack
+                if HighlightFrame then
+                    HighlightFrame.Parent = nil
+                end
+            end
+            UpdateSlotFading()
+        end
+
+        function slot:IsEquipped()
+            return IsEquipped(self.Tool)
+        end
+
+        function slot:Delete()
+            SlotFrame:Destroy() --NOTE: Also clears connections
+            table.remove(Slots, self.Index)
+            local newSize = #Slots
+
+            -- Now adjust the rest (both visually and representationally)
+            for i = self.Index, newSize do
+                Slots[i]:SlideBack()
+            end
+
+            if newSize % HOTBAR_SLOTS == 0 then -- We lost a row at the bottom! Adjust the CanvasSize
+                local lastSlot = Slots[newSize]
+                local lowestPoint = lastSlot.Frame.Position.Y.Offset + lastSlot.Frame.Size.Y.Offset
+                ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, lowestPoint + ICON_BUFFER)
+            end
+        end
+
+        function slot:Swap(targetSlot) --NOTE: This slot (self) must not be empty!
+            local myTool, otherTool = self.Tool, targetSlot.Tool
+            self:Clear()
+            if otherTool then -- (Target slot might be empty)
+                targetSlot:Clear()
+                self:Fill(otherTool)
+            end
+            if myTool then
+                targetSlot:Fill(myTool)
+            else
+                targetSlot:Clear()
+            end
+        end
+
+        function slot:SlideBack() -- For inventory slot shifting
+            self.Index = self.Index - 1
+            SlotFrame.Name = self.Index
+            self:Reposition()
+        end
+
+        function slot:TurnNumber(on)
+            if SlotNumber then
+                SlotNumber.Visible = on
+            end
+        end
+
+        function slot:SetClickability(on) -- (Happens on open/close arrow)
+            if self.Tool then
+                SlotFrame.Draggable = not on
+                UpdateSlotFading()
+            end
+        end
+
+        function slot:CheckTerms(terms)
+            local hits = 0
+            local function checkEm(str, term)
+                local _, n = str:lower():gsub(term, '')
+                hits = hits + n
+            end
+            local tool = self.Tool
+            for term in pairs(terms) do
+                checkEm(tool.Name, term)
+                if tool:IsA('Tool') then --NOTE: HopperBin
+                    checkEm(tool.ToolTip, term)
+                end
+            end
+            return hits
+        end
+
+        -- Slot Init Logic --
+
+        SlotFrame = NewGui('TextButton', index)
+        SlotFrame.BackgroundColor3 = BACKGROUND_COLOR
+        SlotFrame.BorderColor3 = SLOT_BORDER_COLOR
+        SlotFrame.Text = ""
+        SlotFrame.AutoButtonColor = false
+        SlotFrame.BorderSizePixel = 0
+        SlotFrame.Size = UDim2.new(0, ICON_SIZE, 0, ICON_SIZE)
+        SlotFrame.Active = true
+        SlotFrame.Draggable = false
+        SlotFrame.BackgroundTransparency = SLOT_FADE_LOCKED
+        conn(SlotFrame.MouseButton1Click, function() changeSlot(slot) end)
+        slot.Frame = SlotFrame
+
+        ToolIcon = NewGui('ImageLabel', 'Icon')
+        ToolIcon.Size = UDim2.new(0.8, 0, 0.8, 0)
+        ToolIcon.Position = UDim2.new(0.1, 0, 0.1, 0)
+        ToolIcon.Parent = SlotFrame
+
+        ToolName = NewGui('TextLabel', 'ToolName')
+        ToolName.Size = UDim2.new(1, -2, 1, -2)
+        ToolName.Position = UDim2.new(0, 1, 0, 1)
+        ToolName.Parent = SlotFrame
+
+        slot:Reposition()
+
+        if index <= HOTBAR_SLOTS then -- Hotbar-Specific Slot Stuff
+            -- ToolTip stuff
+            ToolTip = NewGui('TextLabel', 'ToolTip')
+            ToolTip.TextWrapped = false
+            ToolTip.TextYAlignment = Enum.TextYAlignment.Top
+            ToolTip.BackgroundColor3 = Color3.new(0.4, 0.4, 0.4)
+            ToolTip.BackgroundTransparency = 0
+            ToolTip.Visible = false
+            ToolTip.Parent = SlotFrame
+            conn(SlotFrame.MouseEnter, function()
+                if ToolTip.Text ~= '' then
+                    ToolTip.Visible = true
+                end
+            end)
+            conn(SlotFrame.MouseLeave, function() ToolTip.Visible = false end)
+
+            -- Slot select logic, activated by clicking or pressing hotkey
+            function slot:Select()
+                local tool = slot.Tool
+                if tool then
+                    if IsEquipped(tool) then --NOTE: HopperBin
+                        UnequipAllTools()
+                    elseif tool.Parent == Backpack then
+                        EquipNewTool(tool)
+                    end
+                end
+            end
+
+            function slot:MoveToInventory()
+                if slot.Index <= HOTBAR_SLOTS then -- From a Hotbar slot
+                    local tool = slot.Tool
+                    self:Clear() --NOTE: Order matters here
+                    local newSlot = MakeSlot(ScrollingFrame)
+                    newSlot:Fill(tool)
+                    if IsEquipped(tool) then -- Also unequip it --NOTE: HopperBin
+                        UnequipAllTools()
+                    end
+                    -- Also hide the inventory slot if we're showing results right now
+                    if ResultsIndices then
+                        newSlot.Frame.Visible = false
+                    end
+                end
+            end
+
+            -- Show label and assign hotkeys for 1-9 and 0 (zero is always last slot when > 10 total)
+            if index < 10 or index == HOTBAR_SLOTS then -- NOTE: Hardcoded on purpose!
+                local slotNum = (index < 10) and index or 0
+                SlotNumber = NewGui('TextLabel', 'Number')
+                SlotNumber.Text = slotNum
+                SlotNumber.Size = UDim2.new(0.15, 0, 0.15, 0)
+                SlotNumber.Visible = false
+                SlotNumber.Parent = SlotFrame
+                HotkeyFns[ZERO_KEY_VALUE + slotNum] = slot.Select
+            end
+        else -- Inventory-Specific Slot Stuff
+
+            local newRow = false
+            newRow = (index % HOTBAR_SLOTS == 1)
+
+            if newRow then -- We are the first slot of a new row! Adjust the CanvasSize
+                local lowestPoint = SlotFrame.Position.Y.Offset + SlotFrame.Size.Y.Offset
+                ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, lowestPoint + ICON_BUFFER)
+            end
+
+            -- Scroll to new inventory slot, if we're open and not viewing search results
+            if InventoryFrame.Visible and not ResultsIndices then
+                local offset = ScrollingFrame.CanvasSize.Y.Offset - ScrollingFrame.AbsoluteSize.Y
+                ScrollingFrame.CanvasPosition = Vector2.new(0, math.max(0, offset))
+            end
+        end
+
+        do -- Dragging Logic
+            local startPoint = SlotFrame.Position
+            local lastUpTime = 0
+            local startParent = nil
+
+            conn(SlotFrame.DragBegin, function(dragPoint)
+                Dragging[SlotFrame] = true
+                startPoint = dragPoint
+
+                SlotFrame.BorderSizePixel = 2
+
+                -- Raise above other slots
+                SlotFrame.ZIndex = 2
+                ToolIcon.ZIndex = 2
+                ToolName.ZIndex = 2
+                if SlotNumber then
+                    SlotNumber.ZIndex = 2
+                end
+                if HighlightFrame then
+                    HighlightFrame.ZIndex = 2
+                    for _, child in pairs(HighlightFrame:GetChildren()) do
+                        child.ZIndex = 2
+                    end
+                end
+
+                -- Circumvent the ScrollingFrame's ClipsDescendants property
+                startParent = SlotFrame.Parent
+                if startParent == ScrollingFrame then
+                    SlotFrame.Parent = InventoryFrame
+                    local pos = ScrollingFrame.Position
+                    local offset = ScrollingFrame.CanvasPosition - Vector2.new(pos.X.Offset, pos.Y.Offset)
+                    SlotFrame.Position = SlotFrame.Position - UDim2.new(0, offset.X, 0, offset.Y)
+                end
+            end)
+
+            conn(SlotFrame.DragStopped, function(x, y)
+                local now = tick()
+                SlotFrame.Position = startPoint
+                SlotFrame.Parent = startParent
+
+                SlotFrame.BorderSizePixel = 0
+
+                -- Restore height
+                SlotFrame.ZIndex = 1
+                ToolIcon.ZIndex = 1
+                ToolName.ZIndex = 1
+                if SlotNumber then
+                    SlotNumber.ZIndex = 1
+                end
+                if HighlightFrame then
+                    HighlightFrame.ZIndex = 1
+                    for _, child in pairs(HighlightFrame:GetChildren()) do
+                        child.ZIndex = 1
+                    end
+                end
+
+                Dragging[SlotFrame] = nil
+
+                -- Make sure the tool wasn't dropped
+                if not slot.Tool then
+                    return
+                end
+
+                -- Check where we were dropped
+                if CheckBounds(InventoryFrame, x, y) then
+                    if slot.Index <= HOTBAR_SLOTS then
+                        slot:MoveToInventory()
+                    end
+                    -- Check for double clicking on an inventory slot, to move into empty hotbar slot
+                    if slot.Index > HOTBAR_SLOTS and now - lastUpTime < DOUBLE_CLICK_TIME then
+                        if LowestEmptySlot then
+                            local myTool = slot.Tool
+                            slot:Clear()
+                            LowestEmptySlot:Fill(myTool)
+                            slot:Delete()
+                        end
+                        now = 0 -- Resets the timer
+                    end
+                elseif CheckBounds(HotbarFrame, x, y) then
+                    local closest = {math.huge, nil}
+                    for i = 1, HOTBAR_SLOTS do
+                        local otherSlot = Slots[i]
+                        local offset = GetOffset(otherSlot.Frame, Vector2.new(x, y))
+                        if offset < closest[1] then
+                            closest = {offset, otherSlot}
+                        end
+                    end
+                    local closestSlot = closest[2]
+                    if closestSlot ~= slot then
+                        slot:Swap(closestSlot)
+                        if slot.Index > HOTBAR_SLOTS then
+                            local tool = slot.Tool
+                            if not tool then -- Clean up after ourselves if we're an inventory slot that's now empty
+                                slot:Delete()
+                            else -- Moved inventory slot to hotbar slot, and gained a tool that needs to be unequipped
+                                if IsEquipped(tool) then --NOTE: HopperBin
+                                    UnequipAllTools()
+                                end
+                                -- Also hide the inventory slot if we're showing results right now
+                                if ResultsIndices then
+                                    slot.Frame.Visible = false
+                                end
+                            end
+                        end
+                    end
+                else
+                    -- local tool = slot.Tool
+                    -- if tool.CanBeDropped then --TODO: HopperBins
+                        -- tool.Parent = workspace
+                        -- --TODO: Move away from character
+                    -- end
+                    if slot.Index <= HOTBAR_SLOTS then
+                        slot:MoveToInventory() --NOTE: Temporary
+                    end
+                end
+
+                lastUpTime = now
+            end)
+        end
+
+        -- All ready!
+        SlotFrame.Parent = parent
+        Slots[index] = slot
+        return slot
+    end
+
+    local function OnChildAdded(child) -- To Character or Backpack
+        if not child:IsA('Tool') and not child:IsA('HopperBin') then --NOTE: HopperBin
+            if child:IsA('Humanoid') and child.Parent == Character then
+                Humanoid = child
+            end
+            return
+        end
+        local tool = child
+
+        if ActiveHopper and tool.Parent == Character then --NOTE: HopperBin
+            DisableActiveHopper()
+        end
+
+        --TODO: Optimize / refactor / do something else
+        if not StarterToolFound and tool.Parent == Character and not SlotsByTool[tool] then
+            local starterGear = Player:FindFirstChild('StarterGear')
+            if starterGear then
+                if starterGear:FindFirstChild(tool.Name) then
+                    StarterToolFound = true
+                    local slot = LowestEmptySlot or MakeSlot(ScrollingFrame)
+                    for i = slot.Index, 1, -1 do
+                        local curr = Slots[i] -- An empty slot, because above
+                        local pIndex = i - 1
+                        if pIndex > 0 then
+                            local prev = Slots[pIndex] -- Guaranteed to be full, because above
+                            prev:Swap(curr)
+                        else
+                            curr:Fill(tool)
+                        end
+                    end
+                    -- Have to manually unequip a possibly equipped tool
+                    for _, child in pairs(Character:GetChildren()) do
+                        if child:IsA('Tool') and child ~= tool then
+                            child.Parent = Backpack
+                        end
+                    end
+                    AdjustHotbarFrames()
+                    return -- We're done here
+                end
+            end
+        end
+
+        -- The tool is either moving or new
+        local slot = SlotsByTool[tool]
+        if slot then
+            slot:UpdateEquipView()
+        else -- New! Put into lowest hotbar slot or new inventory slot
+            slot = LowestEmptySlot or MakeSlot(ScrollingFrame)
+            slot:Fill(tool)
+            if slot.Index <= HOTBAR_SLOTS and not InventoryFrame.Visible then
+                AdjustHotbarFrames()
+            end
+            if tool:IsA('HopperBin') then --NOTE: HopperBin
+                if tool.Active then
+                    UnequipAllTools()
+                    ActiveHopper = tool
+                end
+            end
+        end
+    end
+
+    local function OnChildRemoved(child) -- From Character or Backpack
+        if not child:IsA('Tool') and not child:IsA('HopperBin') then --NOTE: HopperBin
+            return
+        end
+        local tool = child
+
+        -- Ignore this event if we're just moving between the two
+        local newParent = tool.Parent
+        if newParent == Character or newParent == Backpack then
+            return
+        end
+
+        local slot = SlotsByTool[tool]
+        if slot then
+            slot:Clear()
+            if slot.Index > HOTBAR_SLOTS then -- Inventory slot
+                slot:Delete()
+            elseif not InventoryFrame.Visible then
+                AdjustHotbarFrames()
+            end
+        end
+
+        if tool == ActiveHopper then --NOTE: HopperBin
+            ActiveHopper = nil
+        end
+    end
+
+    local function OnCharacterAdded(character)
+        -- First, clean up any old slots
+        for i = #Slots, 1, -1 do
+            local slot = Slots[i]
+            if slot.Tool then
+                slot:Clear()
+            end
+            if i > HOTBAR_SLOTS then
+                slot:Delete()
+            end
+        end
+        ActiveHopper = nil --NOTE: HopperBin
+
+        -- And any old connections
+        for _, oldConn in pairs(CharConns) do
+            if oldConn.Disconnect then
+                oldConn:Disconnect()
+            end
+        end
+        CharConns = {}
+
+        -- Hook up the new character
+        Character = character
+        table.insert(CharConns, conn(character.ChildRemoved, OnChildRemoved))
+        table.insert(CharConns, conn(character.ChildAdded, OnChildAdded))
+        for _, child in pairs(character:GetChildren()) do
+            OnChildAdded(child)
+        end
+        --NOTE: Humanoid is set inside OnChildAdded
+
+        -- And the new backpack, when it gets here
+        Backpack = Player:WaitForChild('Backpack')
+        table.insert(CharConns, conn(Backpack.ChildRemoved, OnChildRemoved))
+        table.insert(CharConns, conn(Backpack.ChildAdded, OnChildAdded))
+        for _, child in pairs(Backpack:GetChildren()) do
+            OnChildAdded(child)
+        end
+
+        AdjustHotbarFrames()
+    end
+
+    local function OnInputBegan(input, isProcessed)
+        -- Pass through keyboard hotkeys when not typing into a TextBox and not disabled (except for the Drop key)
+        if input.UserInputType == Enum.UserInputType.Keyboard and not TextBoxFocused and (WholeThingEnabled or input.KeyCode.Value == DROP_HOTKEY_VALUE) then
+            local hotkeyBehavior = HotkeyFns[input.KeyCode.Value]
+            if hotkeyBehavior then
+                hotkeyBehavior(isProcessed)
+            end
+        end
+    end
+
+    local function OnUISChanged(property)
+        if property == 'KeyboardEnabled' then
+            local on = uis.KeyboardEnabled
+            for i = 1, HOTBAR_SLOTS do
+                Slots[i]:TurnNumber(on)
+            end
+        end
+    end
+
+    -- Gamepad Functions
+    local lastChangeToolInputObject = nil
+    local lastChangeToolInputTime = nil
+    local maxEquipDeltaTime = 0.06
+    local noOpFunc = function() end
+    local selectDirection = Vector2.new(0,0)
+
+    local function unbindAllGamepadEquipActions()
+        ContextActionService:UnbindCoreAction("RBXBackpackHasGamepadFocus")
+        ContextActionService:UnbindCoreAction("RBXCloseInventory")
+    end
+
+    local function setHotbarVisibility(visible, isInventoryScreen)
+        for i = 1, HOTBAR_SLOTS do
+            local hotbarSlot = Slots[i]
+            if hotbarSlot and hotbarSlot.Frame and (isInventoryScreen or hotbarSlot.Tool) then
+                hotbarSlot.Frame.Visible = visible
+            end
+        end
+    end
+
+    local function getInputDirection(inputObject)
+        local buttonModifier = 1
+        if inputObject.UserInputState == Enum.UserInputState.End then
+            buttonModifier = -1
+        end
+
+        if inputObject.KeyCode == Enum.KeyCode.Thumbstick1 then
+
+            local magnitude = inputObject.Position.magnitude
+
+            if magnitude > 0.98 then
+                local normalizedVector = Vector2.new(inputObject.Position.x / magnitude, -inputObject.Position.y / magnitude)
+                selectDirection =  normalizedVector
+            else
+                selectDirection = Vector2.new(0,0)
+            end
+        elseif inputObject.KeyCode == Enum.KeyCode.DPadLeft then
+            selectDirection = Vector2.new(selectDirection.x - 1 * buttonModifier, selectDirection.y)
+        elseif inputObject.KeyCode == Enum.KeyCode.DPadRight then
+            selectDirection = Vector2.new(selectDirection.x + 1 * buttonModifier, selectDirection.y)
+        elseif inputObject.KeyCode == Enum.KeyCode.DPadUp then
+            selectDirection = Vector2.new(selectDirection.x, selectDirection.y - 1 * buttonModifier)
+        elseif inputObject.KeyCode == Enum.KeyCode.DPadDown then
+            selectDirection = Vector2.new(selectDirection.x, selectDirection.y + 1 * buttonModifier)
+        else
+            selectDirection = Vector2.new(0,0)
+        end
+
+        return selectDirection
+    end
+
+    local selectToolExperiment = function(actionName, inputState, inputObject)
+
+        local inputDirection = getInputDirection(inputObject)
+
+        if inputDirection == Vector2.new(0,0) then
+            return
+        end
+
+        local angle = math.atan2(inputDirection.y, inputDirection.x) - math.atan2(-1, 0)
+        if angle < 0 then
+            angle = angle + (math.pi * 2)
+        end
+
+        local quarterPi = (math.pi * 0.25)
+
+        local index = (angle/quarterPi) + 1
+        index = math.floor(index + 0.5) -- round index to whole number
+        if index > HOTBAR_SLOTS then
+            index = 1
+        end
+
+        if index > 0 then
+            local selectedSlot = Slots[index]
+            if selectedSlot and selectedSlot.Tool and not selectedSlot:IsEquipped() then
+                selectedSlot:Select()
+            end
+        else
+            UnequipAllTools()
+        end
+    end
+
+    local changeToolFunc = function(actionName, inputState, inputObject)
+        if inputState ~= Enum.UserInputState.Begin then return end
+
+        if lastChangeToolInputObject then
+            if (lastChangeToolInputObject.KeyCode == Enum.KeyCode.ButtonR1 and
+                inputObject.KeyCode == Enum.KeyCode.ButtonL1) or
+                (lastChangeToolInputObject.KeyCode == Enum.KeyCode.ButtonL1 and
+                inputObject.KeyCode == Enum.KeyCode.ButtonR1) then
+                    if (tick() - lastChangeToolInputTime) <= maxEquipDeltaTime then
+                        UnequipAllTools()
+                        lastChangeToolInputObject = inputObject
+                        lastChangeToolInputTime = tick()
+                        return
+                    end
+            end
+        end
+
+        lastChangeToolInputObject = inputObject
+        lastChangeToolInputTime = tick()
+
+        delay(maxEquipDeltaTime, function()
+            if lastChangeToolInputObject ~= inputObject then return end
+
+            local moveDirection = 0
+            if (inputObject.KeyCode == Enum.KeyCode.ButtonL1) then
+                moveDirection = -1
+            else
+                moveDirection = 1
+            end
+
+            for i = 1, HOTBAR_SLOTS do
+                local hotbarSlot = Slots[i]
+                if hotbarSlot:IsEquipped() then
+
+                    local newSlotPosition = moveDirection + i
+                    if newSlotPosition > HOTBAR_SLOTS then
+                        newSlotPosition = 1
+                    elseif newSlotPosition < 1 then
+                        newSlotPosition = HOTBAR_SLOTS
+                    end
+
+                    local origNewSlotPos = newSlotPosition
+                    while not Slots[newSlotPosition].Tool do
+                        newSlotPosition = newSlotPosition + moveDirection
+                        if newSlotPosition == origNewSlotPos then return end
+
+                        if newSlotPosition > HOTBAR_SLOTS then
+                            newSlotPosition = 1
+                        elseif newSlotPosition < 1 then
+                            newSlotPosition = HOTBAR_SLOTS
+                        end
+                    end
+
+                    Slots[newSlotPosition]:Select()
+                    return
+                end
+            end
+
+            if lastEquippedSlot and lastEquippedSlot.Tool then
+                lastEquippedSlot:Select()
+                return
+            end
+
+            for i = 1, HOTBAR_SLOTS do
+                if Slots[i].Tool then
+                    Slots[i]:Select()
+                    return
+                end
+            end
+        end)
+    end
+
+    local function getGamepadSwapSlot()
+        for i = 1, #Slots do
+            if Slots[i].Frame.BorderSizePixel > 0 then
+                return Slots[i]
+            end
+        end
+    end
+
+    changeSlot = function(slot)
+        if slot.Frame == GuiService.SelectedCoreObject then
+            local currentlySelectedSlot = getGamepadSwapSlot()
+
+            if currentlySelectedSlot then
+                currentlySelectedSlot.Frame.BorderSizePixel = 0
+                if currentlySelectedSlot ~= slot then
+                    slot:Swap(currentlySelectedSlot)
+
+                    if slot.Index > HOTBAR_SLOTS and not slot.Tool then
+                        if GuiService.SelectedCoreObject == slot.Frame then
+                            GuiService.SelectedCoreObject = currentlySelectedSlot.Frame
+                        end
+                        slot:Delete()
+                    end
+
+                    if currentlySelectedSlot.Index > HOTBAR_SLOTS and not currentlySelectedSlot.Tool then
+                        if GuiService.SelectedCoreObject == currentlySelectedSlot.Frame then
+                            GuiService.SelectedCoreObject = slot.Frame
+                        end
+                        currentlySelectedSlot:Delete()
+                    end
+                end
+            else
+                local startSize = slot.Frame.Size
+                local startPosition = slot.Frame.Position
+                slot.Frame:TweenSizeAndPosition(startSize + UDim2.new(0, 10, 0, 10), startPosition - UDim2.new(0, 5, 0, 5), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, .1, true, function() slot.Frame:TweenSizeAndPosition(startSize, startPosition, Enum.EasingDirection.In, Enum.EasingStyle.Quad, .1, true) end)
+                slot.Frame.BorderSizePixel = 3
+            end
+        else
+            slot:Select()
+        end
+    end
+
+    local function enableGamepadInventoryControl()
+        local goBackOneLevel = function(actionName, inputState, inputObject)
+            if inputState ~= Enum.UserInputState.Begin then return end
+
+            local selectedSlot = getGamepadSwapSlot()
+            if selectedSlot then
+                local selectedSlot = getGamepadSwapSlot()
+                if selectedSlot then
+                    selectedSlot.Frame.BorderSizePixel = 0
+                    return
+                end
+            elseif InventoryFrame.Visible then
+                BP.OpenClose()
+                spawn(function() GuiService:SetMenuIsOpen(false) end)
+            end
+        end
+
+        ContextActionService:BindCoreAction("RBXBackpackHasGamepadFocus", noOpFunc, false, Enum.UserInputType.Gamepad1)
+        ContextActionService:BindCoreAction("RBXCloseInventory", goBackOneLevel, false, Enum.KeyCode.ButtonB, Enum.KeyCode.ButtonStart)
+
+        GuiService.SelectedCoreObject = HotbarFrame:FindFirstChild("1")
+    end
+
+    local function disableGamepadInventoryControl()
+        unbindAllGamepadEquipActions()
+
+        for i = 1, HOTBAR_SLOTS do
+            local hotbarSlot = Slots[i]
+            if hotbarSlot and hotbarSlot.Frame then
+                hotbarSlot.Frame.BorderSizePixel = 0
+            end
+        end
+
+        if GuiService.SelectedCoreObject and GuiService.SelectedCoreObject:IsDescendantOf(MainFrame) then
+            GuiService.SelectedCoreObject = nil
+        end
+    end
+
+    local function gamepadDisconnected()
+        GamepadEnabled = false
+        disableGamepadInventoryControl()
+    end
+
+    local function gamepadConnected()
+        GamepadEnabled = true
+        GuiService:AddSelectionParent("RBXBackpackSelection", MainFrame)
+
+        if not gamepadActionsBound then
+            gamepadActionsBound = true
+            ContextActionService:BindCoreAction("RBXHotbarEquip", changeToolFunc, false, Enum.KeyCode.ButtonL1, Enum.KeyCode.ButtonR1)
+        end
+
+        if InventoryFrame.Visible then
+            enableGamepadInventoryControl()
+        end
+    end
+    -- End Gamepad Functions
+
+    -- Script Logic
+
+    -- Make the main frame, which (mostly) covers the screen
+    MainFrame = NewGui('Frame', 'Backpack')
+    MainFrame.Visible = false
+    MainFrame.Parent = screenGui
+    registerHubHidden(MainFrame)
+
+    -- Make the HotbarFrame, which holds only the Hotbar Slots
+    HotbarFrame = NewGui('Frame', 'Hotbar')
+    HotbarFrame.Size = HOTBAR_SIZE
+    HotbarFrame.Position = UDim2.new(0.5, -HotbarFrame.Size.X.Offset / 2, 1, -HotbarFrame.Size.Y.Offset)
+    HotbarFrame.Parent = MainFrame
+
+    -- Make all the Hotbar Slots
+    for i = 1, HOTBAR_SLOTS do
+        local slot = MakeSlot(HotbarFrame, i)
+        slot.Frame.Visible = false
+
+        if not LowestEmptySlot then
+            LowestEmptySlot = slot
+        end
+    end
+
+    -- Make the Inventory, which holds the ScrollingFrame, the header, and the search box
+    InventoryFrame = NewGui('Frame', 'Inventory')
+    InventoryFrame.BackgroundTransparency = BACKGROUND_FADE
+    InventoryFrame.BackgroundColor3 = BACKGROUND_COLOR
+    InventoryFrame.Active = true
+    InventoryFrame.Size = UDim2.new(0, HotbarFrame.Size.X.Offset, 0, (HotbarFrame.Size.Y.Offset * INVENTORY_ROWS) + INVENTORY_HEADER_SIZE)
+    InventoryFrame.Position = UDim2.new(0.5, -InventoryFrame.Size.X.Offset / 2, 1, HotbarFrame.Position.Y.Offset - InventoryFrame.Size.Y.Offset)
+    InventoryFrame.Visible = false
+    InventoryFrame.Parent = MainFrame
+
+    -- Make the ScrollingFrame, which holds the rest of the Slots (however many)
+    ScrollingFrame = NewGui('ScrollingFrame', 'ScrollingFrame')
+    ScrollingFrame.Selectable = false
+    ScrollingFrame.Size = UDim2.new(1, ScrollingFrame.ScrollBarThickness + 1, 1, -INVENTORY_HEADER_SIZE)
+
+    ScrollingFrame.Position = UDim2.new(0, 0, 0, INVENTORY_HEADER_SIZE)
+    ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    ScrollingFrame.Parent = InventoryFrame
+
+    -- Make the gamepad hint frame
+    local gamepadHintsFrame = xnew('Frame', {
+        Name = "GamepadHintsFrame",
+        Size = UDim2.new(0, HotbarFrame.Size.X.Offset, 0, (isTenFootInterface and 95 or 60)),
+        BackgroundTransparency = 1,
+        Visible = false,
+        Parent = MainFrame
+    })
+
+    local function addGamepadHint(hintImage, hintImageLarge, hintText)
+        local hintFrame = xnew('Frame', {
+            Name = "HintFrame",
+            Size = UDim2.new(1, 0, 1, -5),
+            Position = UDim2.new(0, 0, 0, 0),
+            BackgroundTransparency = 1,
+            Parent = gamepadHintsFrame
+        })
+
+        local hintImage = xnew('ImageLabel', {
+            Name = "HintImage",
+            Size = (isTenFootInterface and UDim2.new(0,90,0,90) or UDim2.new(0,60,0,60)),
+            BackgroundTransparency = 1,
+            Image = (isTenFootInterface and hintImageLarge or hintImage),
+            Parent = hintFrame
+        })
+
+        local hintText = xnew('TextLabel', {
+            Name = "HintText",
+            Position = UDim2.new(0, (isTenFootInterface and 100 or 70), 0, 0),
+            Size = UDim2.new(1, -(isTenFootInterface and 100 or 70), 1, 0),
+            Font = Enum.Font.SourceSansBold,
+            FontSize = (isTenFootInterface and Enum.FontSize.Size36 or Enum.FontSize.Size24),
+            BackgroundTransparency = 1,
+            Text = hintText,
+            TextColor3 = Color3.new(1,1,1),
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = hintFrame
+        })
+    end
+
+    local function resizeGamepadHintsFrame()
+        gamepadHintsFrame.Size = UDim2.new(HotbarFrame.Size.X.Scale, HotbarFrame.Size.X.Offset, 0, (isTenFootInterface and 95 or 60))
+        gamepadHintsFrame.Position = UDim2.new(HotbarFrame.Position.X.Scale, HotbarFrame.Position.X.Offset, InventoryFrame.Position.Y.Scale, InventoryFrame.Position.Y.Offset - gamepadHintsFrame.Size.Y.Offset)
+
+        local spaceTaken = 0
+
+        local gamepadHints = gamepadHintsFrame:GetChildren()
+        --First get the total space taken by all the hints
+        for i = 1, #gamepadHints do
+            gamepadHints[i].Size = UDim2.new(1, 0, 1, -5)
+            gamepadHints[i].Position = UDim2.new(0, 0, 0, 0)
+            spaceTaken = spaceTaken + (gamepadHints[i].HintText.Position.X.Offset + gamepadHints[i].HintText.TextBounds.X)
+        end
+
+        --The space between all the frames should be equal
+        local spaceBetweenElements = (gamepadHintsFrame.AbsoluteSize.X - spaceTaken)/(#gamepadHints - 1)
+        for i = 1, #gamepadHints do
+            gamepadHints[i].Position = (i == 1 and UDim2.new(0, 0, 0, 0) or UDim2.new(0, gamepadHints[i-1].Position.X.Offset + gamepadHints[i-1].Size.X.Offset + spaceBetweenElements, 0, 0))
+            gamepadHints[i].Size = UDim2.new(0, (gamepadHints[i].HintText.Position.X.Offset + gamepadHints[i].HintText.TextBounds.X), 1, -5)
+        end
+    end
+
+    addGamepadHint("rbxasset://textures/ui/Settings/Help/XButtonDark.png", "rbxasset://textures/ui/Settings/Help/XButtonDark@2x.png", "Remove From Hotbar")
+    addGamepadHint("rbxasset://textures/ui/Settings/Help/AButtonDark.png", "rbxasset://textures/ui/Settings/Help/AButtonDark@2x.png", "Select/Swap")
+    addGamepadHint("rbxasset://textures/ui/Settings/Help/BButtonDark.png", "rbxasset://textures/ui/Settings/Help/BButtonDark@2x.png", "Close Backpack")
+
+    do -- Search stuff
+        local searchFrame = NewGui('Frame', 'Search')
+        searchFrame.BackgroundColor3 = SEARCH_BACKGROUND_COLOR
+        searchFrame.BackgroundTransparency = SEARCH_BACKGROUND_FADE
+        searchFrame.Size = UDim2.new(0, SEARCH_WIDTH - (SEARCH_BUFFER * 2), 0, INVENTORY_HEADER_SIZE - (SEARCH_BUFFER * 2))
+        searchFrame.Position = UDim2.new(1, -searchFrame.Size.X.Offset - SEARCH_BUFFER, 0, SEARCH_BUFFER)
+        searchFrame.Parent = InventoryFrame
+
+        local searchBox = NewGui('TextBox', 'TextBox')
+        searchBox.Text = SEARCH_TEXT
+        searchBox.ClearTextOnFocus = false
+        searchBox.FontSize = Enum.FontSize.Size24
+        searchBox.TextXAlignment = Enum.TextXAlignment.Left
+        searchBox.Size = searchFrame.Size - UDim2.new(0, SEARCH_TEXT_OFFSET_FROMLEFT, 0, 0)
+        searchBox.Position = UDim2.new(0, SEARCH_TEXT_OFFSET_FROMLEFT, 0, 0)
+        searchBox.Parent = searchFrame
+
+        local xButton = NewGui('TextButton', 'X')
+        xButton.Text = 'x'
+        xButton.TextColor3 = SLOT_EQUIP_COLOR
+        xButton.FontSize = Enum.FontSize.Size24
+        xButton.TextYAlignment = Enum.TextYAlignment.Bottom
+        xButton.BackgroundColor3 = SEARCH_BACKGROUND_COLOR
+        xButton.BackgroundTransparency = 0
+        xButton.Size = UDim2.new(0, searchFrame.Size.Y.Offset - (SEARCH_BUFFER * 2), 0, searchFrame.Size.Y.Offset - (SEARCH_BUFFER * 2))
+        xButton.Position = UDim2.new(1, -xButton.Size.X.Offset - (SEARCH_BUFFER * 2), 0.5, -xButton.Size.Y.Offset / 2)
+        xButton.ZIndex = 0
+        xButton.Visible = true
+        xButton.BorderSizePixel = 0
+        xButton.Parent = searchFrame
+
+        local function search()
+            local terms = {}
+            for word in searchBox.Text:gmatch('%S+') do
+                terms[word:lower()] = true
+            end
+
+            local hitTable = {}
+            for i = HOTBAR_SLOTS + 1, #Slots do -- Only search inventory slots
+                local slot = Slots[i]
+                local hits = slot:CheckTerms(terms)
+                table.insert(hitTable, {slot, hits})
+                slot.Frame.Visible = false
+            end
+
+            table.sort(hitTable, function(left, right)
+                return left[2] > right[2]
+            end)
+            ResultsIndices = {}
+
+            for i, data in ipairs(hitTable) do
+                local slot, hits = data[1], data[2]
+                if hits > 0 then
+                    ResultsIndices[slot] = HOTBAR_SLOTS + i
+                    slot:Reposition()
+                    slot.Frame.Visible = true
+                end
+            end
+
+            ScrollingFrame.CanvasPosition = Vector2.new(0, 0)
+
+            xButton.ZIndex = 3
+        end
+
+        local function clearResults()
+            if xButton.ZIndex > 0 then
+                ResultsIndices = nil
+                for i = HOTBAR_SLOTS + 1, #Slots do
+                    local slot = Slots[i]
+                    slot:Reposition()
+                    slot.Frame.Visible = true
+                end
+                xButton.ZIndex = 0
+            end
+        end
+
+        local function reset()
+            clearResults()
+            searchBox.Text = SEARCH_TEXT
+        end
+
+        local function onChanged(property)
+            if property == 'Text' then
+                local text = searchBox.Text
+                if text == '' then
+                    clearResults()
+                elseif text ~= SEARCH_TEXT then
+                    search()
+                end
+            end
+        end
+
+        local function onFocused()
+            if searchBox.Text == SEARCH_TEXT then
+                searchBox.Text = ''
+            end
+        end
+
+        local function focusLost(enterPressed)
+            if enterPressed then
+                --TODO: Could optimize
+                search()
+            elseif searchBox.Text == '' then
+                searchBox.Text = SEARCH_TEXT
+            end
+        end
+
+        conn(searchBox.Focused, onFocused)
+        conn(xButton.MouseButton1Click, reset)
+        conn(searchBox:GetPropertyChangedSignal('Text'), onChanged)
+        conn(searchBox.FocusLost, focusLost)
+
+        conn(BP.StateChanged.Event, function(isNowOpen)
+            xButton.Modal = isNowOpen -- Allows free mouse movement even in first person
+            if not isNowOpen then
+                reset()
+            end
+        end)
+
+        HotkeyFns[Enum.KeyCode.Escape.Value] = function(isProcessed)
+            if isProcessed then -- Pressed from within a TextBox
+                reset()
+            elseif InventoryFrame.Visible then
+                BP.OpenClose()
+            end
+        end
+
+        local function detectGamepad(input, processed)
+            if input.UserInputType == Enum.UserInputType.Gamepad1 then
+                searchFrame.Visible = false
+            else
+                searchFrame.Visible = true
+            end
+        end
+        conn(uis.InputBegan, detectGamepad)
+        conn(uis.InputChanged, detectGamepad)
+    end
+
+    do -- Make the Inventory expand/collapse arrow (unless TopBar)
+        local arrowFrame, arrowIcon = nil, nil
+        local collapsed, closed, opened = nil, nil, nil
+
+        local removeHotBarSlot = function(name, state, input)
+            if state ~= Enum.UserInputState.Begin then return end
+            if not GuiService.SelectedCoreObject then return end
+
+            for i = 1, HOTBAR_SLOTS do
+                if Slots[i].Frame == GuiService.SelectedCoreObject and Slots[i].Tool then
+                    Slots[i]:MoveToInventory()
+                    return
+                end
+            end
+        end
+
+        local function openClose()
+            if not next(Dragging) then -- Only continue if nothing is being dragged
+                InventoryFrame.Visible = not InventoryFrame.Visible
+                local nowOpen = InventoryFrame.Visible
+                if arrowIcon then
+                    arrowIcon.Image = (nowOpen) and ARROW_IMAGE_CLOSE or ARROW_IMAGE_OPEN
+                end
+                AdjustHotbarFrames()
+                UpdateArrowFrame()
+                HotbarFrame.Active = not HotbarFrame.Active
+                for i = 1, HOTBAR_SLOTS do
+                    Slots[i]:SetClickability(not nowOpen)
+                end
+            end
+
+            if GamepadEnabled then
+                if InventoryFrame.Visible then
+                    local lastInputType = uis:GetLastInputType()
+                    local currentlyUsingGamepad = (lastInputType == Enum.UserInputType.Gamepad1 or lastInputType == Enum.UserInputType.Gamepad2 or
+                        lastInputType == Enum.UserInputType.Gamepad3 or lastInputType == Enum.UserInputType.Gamepad4)
+                    if currentlyUsingGamepad then
+                        resizeGamepadHintsFrame()
+                        gamepadHintsFrame.Visible = true
+                    end
+                    enableGamepadInventoryControl()
+                else
+                    gamepadHintsFrame.Visible = false
+                    disableGamepadInventoryControl()
+                end
+            end
+
+            if InventoryFrame.Visible and GamepadEnabled then
+                ContextActionService:BindCoreAction("RBXRemoveSlot", removeHotBarSlot, false, Enum.KeyCode.ButtonX)
+            elseif GamepadEnabled then
+                ContextActionService:UnbindCoreAction("RBXRemoveSlot")
+            end
+
+            BP.IsOpen = InventoryFrame.Visible
+            BP.StateChanged:Fire(InventoryFrame.Visible)
+
+            if hubopen then togglesettings() end
+        end
+        HotkeyFns[ARROW_HOTKEY] = openClose
+        BP.OpenClose = openClose -- Exposed
+
+        -- TopBar is enabled in clientMid, so no arrow frame is created
+
+        -- Define arrow update function (no-op since arrowFrame is nil)
+        UpdateArrowFrame = function()
+            if arrowFrame then
+                arrowFrame.Position = (InventoryFrame.Visible) and opened or ((FullHotbarSlots == 0) and collapsed or closed)
+            end
+        end
+    end
+
+    -- Now that we're done building the GUI, we connect to all the major events
+
+    -- Listen to current and all future characters of our player
+    conn(Player.CharacterAdded, OnCharacterAdded)
+    if Player.Character then
+        OnCharacterAdded(Player.Character)
+    end
+
+    do -- Hotkey stuff
+        -- Listen to key down
+        conn(uis.InputBegan, OnInputBegan)
+
+        -- Listen to ANY TextBox gaining or losing focus, for disabling all hotkeys
+        conn(uis.TextBoxFocused, function() TextBoxFocused = true end)
+        conn(uis.TextBoxFocusReleased, function() TextBoxFocused = false end)
+
+        -- Manual unequip for HopperBins on drop button pressed
+        HotkeyFns[DROP_HOTKEY_VALUE] = function() --NOTE: HopperBin
+            if ActiveHopper then
+                UnequipAllTools()
+            end
+        end
+
+        -- Listen to keyboard status, for showing/hiding hotkey labels
+        conn(uis.Changed, OnUISChanged)
+        OnUISChanged('KeyboardEnabled')
+
+        -- Listen to gamepad status, for allowing gamepad style selection/equip
+        if uis:GetGamepadConnected(Enum.UserInputType.Gamepad1) then
+            gamepadConnected()
+        end
+        conn(uis.GamepadConnected, function(gamepadEnum)
+            if gamepadEnum == Enum.UserInputType.Gamepad1 then
+                gamepadConnected()
+            end
+        end)
+        conn(uis.GamepadDisconnected, function(gamepadEnum)
+            if gamepadEnum == Enum.UserInputType.Gamepad1 then
+                gamepadDisconnected()
+            end
+        end)
+    end
+
+    -- Show the backpack (clientMid's topbar icon handles open/close)
+    WholeThingEnabled = true
+    MainFrame.Visible = true
+end
+initBackpack()
+end
+
+-- Top-GUI detector: pushes top GUIs that poke up too high down so they sit just below the topbar
+warn("clientMid: top-gui fixer enabled (v5, PlayerGui only)")
+local rpg = game:GetService("PlayerGui")
+local movedGuis = {}
+local screenList = {}
+local screensDirty = true
+local lastFullRefresh = 0
+local function refreshScreens()
+    screenList = {}
+    local ok, pchildren = pcall(function() return rpg:GetChildren() end)
+    if ok and type(pchildren) == "table" then
+        for _, v in ipairs(pchildren) do
+            if typeof(v) == "Instance" and v:IsA("ScreenGui") and v ~= screenGui then
+                screenList[#screenList + 1] = v
+            end
+        end
+    end
+end
+local dirtySignals = {
+    {rpg, "DescendantAdded"},
+    {rpg, "DescendantRemoved"}
+}
+for _, s in ipairs(dirtySignals) do
+    pcall(function()
+        local sig = s[1][s[2]]
+        if sig then
+            conn(sig, function(d)
+                if d:IsA("ScreenGui") then screensDirty = true end
+            end)
+        end
+    end)
+end
+local function fixTopGuis()
+    local now = os.clock()
+    if screensDirty or now - lastFullRefresh > 5 then
+        screensDirty = false
+        lastFullRefresh = now
+        refreshScreens()
+    end
+    local res = GuiService:GetScreenResolution()
+    local sw, sh = res.X, res.Y
+    local topbarBottom = topbarbg.AbsolutePosition.Y + topbarbg.AbsoluteSize.Y
+    local topY = topbarBottom + 2
+    local function visit(obj)
+        if typeof(obj) ~= "Instance" then return end
+        local shifted = false
+        pcall(function()
+            if obj:IsA("GuiObject") and obj.Visible then
+                local as = obj.AbsoluteSize
+                local ap = obj.AbsolutePosition
+                local sx, sy = as.X, as.Y
+                local apY = ap.Y
+                local bottom = apY + sy
+                if sx > 0 and sy > 0 and apY < topY and bottom < sh * 0.9 then
+                    obj.Position = obj.Position + UDim2.new(0, 0, 0, topY - apY)
+                    shifted = true
+                    if not movedGuis[obj] then
+                        movedGuis[obj] = true
+                        warn("clientMid: moved top gui: " .. obj:GetFullName() .. " from y=" .. apY .. " down " .. (topY - apY))
+                    end
+                end
+            end
+        end)
+        if not shifted then
+            local ok, children = pcall(function() return obj:GetChildren() end)
+            if ok then
+                for _, child in ipairs(children) do
+                    visit(child)
+                end
+            end
+        end
+    end
+    for _, gui in ipairs(screenList) do
+        if gui.Parent then
+            visit(gui)
+        end
+    end
+end
+spawn(function()
+    while G.clientMidRun == runId do
+        fixTopGuis()
+        wait(0.1)
+    end
+end)
 
 -- thanks for using clientMid :3
