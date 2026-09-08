@@ -303,13 +303,40 @@ topbarbg.Parent = screenGui
 
 -- gui code
 
+local autoCore = nil
+
 local function dis(name)
     for _, v in ipairs(config.TopbarDisabled) do
         if v == name then
             return true
         end
     end
+    if autoCore and autoCore[name] then
+        return true
+    end
     return false
+end
+
+local autoChecks = {
+    PlayerList = { Type = Enum.CoreGuiType.PlayerList },
+    Backpack = { Type = Enum.CoreGuiType.Backpack },
+    Chat = { Type = Enum.CoreGuiType.Chat },
+    Health = { Type = Enum.CoreGuiType.Health },
+}
+
+local function autoget(name)
+    local c = autoChecks[name]
+    if not c then return true end
+    if c.Get then return c.Get() end
+    local ok, on = pcall(function() return game.StarterGui:GetCoreGuiEnabled(c.Type) end)
+    return ok and on
+end
+
+if dis("Automatic") then
+    autoCore = {}
+    for name in pairs(autoChecks) do
+        autoCore[name] = not autoget(name)
+    end
 end
 
 topbarbg.Visible = not dis("Topbar_Bg")
@@ -1711,6 +1738,26 @@ backpackIconImage.Parent = backpackIconButton
 
 topbarIcons[#topbarIcons + 1] = backpackIconButton
 
+if autoCore then
+    local function applyAuto()
+        Container.Visible = not dis("PlayerList")
+        chatIconButton.Visible = not dis("Chat")
+        backpackIconButton.Visible = not dis("Backpack")
+        hc.Visible = not dis("Health")
+    end
+    for name, c in pairs(autoChecks) do
+        if c.Type then
+            local ok, sig = pcall(function() return game.StarterGui:GetCoreGuiEnabledChanged(c.Type) end)
+            if ok and sig then
+                conn(sig, function()
+                    autoCore[name] = not autoget(name)
+                    applyAuto()
+                end)
+            end
+        end
+    end
+end
+
 G.clientMid.Backpack = G.clientMid.Backpack or {}
 G.clientMid.Backpack.StateChanged = Instance.new("BindableEvent")
 G.clientMid.Backpack.IsOpen = false
@@ -2168,7 +2215,7 @@ for k, v in pairs(tmpvals) do
     end
 end
 
-local function plugenc(meta, files)
+local function plugenc(meta, files, settings)
     local out = {"--<cmplug v=1>", "return {"}
     out[#out + 1] = "meta = {"
     for k, v in pairs(meta) do
@@ -2177,6 +2224,12 @@ local function plugenc(meta, files)
     out[#out + 1] = "},files = {"
     for k, v in pairs(files) do
         out[#out + 1] = "[" .. string.format("%q", tostring(k)) .. "]=" .. string.format("%q", tostring(v)) .. ","
+    end
+    if type(settings) == "table" then
+        out[#out + 1] = "},settings = {"
+        for k, v in pairs(settings) do
+            out[#out + 1] = "[" .. string.format("%q", tostring(k)) .. "]=" .. string.format("%q", tostring(v)) .. ","
+        end
     end
     out[#out + 1] = "}}"
     return table.concat(out, "\n")
@@ -2209,6 +2262,12 @@ local function plugload(t)
     local entry = t.meta.entry or "main.lua"
     local fn, err = loadfile(dir .. "/" .. entry)
     if not fn then return false, err end
+    if type(t.settings) == "table" and G and G.clientMid then
+        pcall(function()
+            G.clientMid.PluginSettings = G.clientMid.PluginSettings or {}
+            G.clientMid.PluginSettings[t.meta.name] = t.settings
+        end)
+    end
     local ok, r = pcall(fn)
     if not ok then return false, r end
     loadedplugs[t.meta.name] = true
@@ -2392,6 +2451,27 @@ local function buildplugins(page)
                 sfield("Author", meta.author or "", function(v) meta.author = v end)
                 sfield("Description", meta.desc or "", function(v) meta.desc = v end)
                 sfield("Icon id", meta.icon or "", function(v) meta.icon = v end)
+                if type(t.settings) == "table" then
+                    mklab(sf, "SettingsLabel", "Settings", UDim2.new(0, 4, 0, sy + 5), UDim2.new(0, 150, 1, 0), false)
+                    local sv = mktxt(sf, "S_Settings", t.settings.snippet and tostring(t.settings.snippet) or "", UDim2.new(0, 158, 0, sy + 6), UDim2.new(1, -170, 0, 160), true)
+                    sv.Font = Enum.Font.Code
+                    sv.FontSize = Enum.FontSize.Size14
+                    local function saveit()
+                        t.settings = t.settings or {}
+                        t.settings.snippet = sv.Text
+                        pcall(function() writefile(path, plugenc(t.meta, t.files, t.settings)) end)
+                        pcall(function()
+                            if G.clientMid and G.clientMid.TopbarDisabledLive then
+                                G.clientMid.TopbarDisabledLive.apply(sv.Text)
+                            end
+                        end)
+                        status("saved + applied: " .. key)
+                        renderrows()
+                    end
+                    mkbtn2(sf, "SettingsApply", "Apply", UDim2.new(0, 158, 0, sy + 170), UDim2.new(0, 110, 0, 34), saveit)
+                    mklab(sf, "SettingsHint", "No re-exec needed", UDim2.new(0, 278, 0, sy + 170), UDim2.new(1, -290, 0, 34), false)
+                    sy = sy + 204
+                end
                 sf.Size = UDim2.new(1, -44, 0, sy)
                 baseH = 64 + sy + 10
             else
