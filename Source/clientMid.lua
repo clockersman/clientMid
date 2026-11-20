@@ -177,6 +177,8 @@ local config = {
 
 -- MAIN CODE
 
+wait(5)
+
 -- Services (All)
 
 local CoreGui = game:GetService("CoreGui")
