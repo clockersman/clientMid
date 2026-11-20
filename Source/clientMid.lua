@@ -94,6 +94,10 @@ local config = {
     -- Chat
     ChatTeamIndicator = false,
 
+    -- guest mode
+    GuestMode = false,
+    UsernamePatch = false,
+
     Assets = {
 	-- topbar
 
@@ -217,6 +221,31 @@ end
 if G.clientMidRun ~= runId then return end
 local Player = Players.LocalPlayer or Players.LocalPlayerAdded:Wait()
 if G.clientMidRun ~= runId then return end
+
+-- guest mode helpers
+G.clientMidGuest = G.clientMidGuest or {mode = config.GuestMode == true, number = nil}
+G.clientMidGuest.displayName = function(plr)
+    local guestState = G.clientMidGuest
+    if guestState.mode and plr == Player then
+        if not guestState.number then
+            guestState.number = math.random(0, 9999)
+            if config.UsernamePatch and Player then
+                -- match "Guest8827", "Geust8827", "GUEST 8827", etc.
+                local uname = string.lower(Player.Name or "")
+                local digits = string.match(uname, "guest%s*(%d+)") or string.match(uname, "geust%s*(%d+)")
+                if digits then
+                    local n = tonumber(digits)
+                    if n then
+                        if n < 0 then n = 0 elseif n > 9999 then n = 9999 end
+                        guestState.number = n
+                    end
+                end
+            end
+        end
+        return "Guest " .. tostring(guestState.number)
+    end
+    return nil
+end
 
 -- CoreGui deletion
 local delnames = {TopBarApp = true, ExperienceChat = true, PlayerList = true}
@@ -365,6 +394,8 @@ nhc.BackgroundTransparency = 1
 nhc.Parent = topbarbg
 
 local function nmtext()
+    local gname = G.clientMidGuest.displayName(Player)
+    if gname then return gname end
     if config.UsernameOrDisplay == "Username" then return Player.Name end
     return Player.DisplayName
 end
@@ -513,11 +544,8 @@ lsc.Parent = topbarbg
 -- world
 
 local function setnm(hum, plr)
-    if config.UsernameOrDisplay == "Username" then
-        hum.DisplayName = plr.Name
-    else
-        hum.DisplayName = plr.DisplayName
-    end
+    local gname = G.clientMidGuest.displayName(plr)
+    hum.DisplayName = gname or (config.UsernameOrDisplay == "Username" and plr.Name or plr.DisplayName)
     hum.NameDisplayDistance = 100
     hum.NameOcclusion = Enum.NameOcclusion.OccludeAll
     if config.ShowHealthBar then
@@ -533,11 +561,8 @@ local function onplr(plr)
         if G.clientMidRun ~= runId then return end
         setnm(hum, plr)
         conn(hum:GetPropertyChangedSignal("DisplayName"), function()
-            if config.UsernameOrDisplay == "Username" then
-                if hum.DisplayName ~= plr.Name then hum.DisplayName = plr.Name end
-            else
-                if hum.DisplayName ~= plr.DisplayName then hum.DisplayName = plr.DisplayName end
-            end
+            local wanted = G.clientMidGuest.displayName(plr) or (config.UsernameOrDisplay == "Username" and plr.Name or plr.DisplayName)
+            if hum.DisplayName ~= wanted then hum.DisplayName = wanted end
         end)
         conn(hum:GetPropertyChangedSignal("HealthDisplayType"), function()
             if config.ShowHealthBar then
@@ -625,6 +650,8 @@ local FRIEND_REQUEST_ICON = config.Assets.Friend_Request_Icon
 local FRIEND_RECEIVED_ICON = config.Assets.Friend_Received_Icon
 
 local function getplname(plr)
+    local gname = G.clientMidGuest.displayName(plr)
+    if gname then return gname end
     if config.UsernameOrDisplay == "Display" then return plr.DisplayName end
     return plr.Name
 end
@@ -3313,7 +3340,7 @@ end
     helpText.TextXAlignment = Enum.TextXAlignment.Left
     helpText.TextYAlignment = Enum.TextYAlignment.Top
     helpText.TextWrapped = true
-    helpText.Text = "Please chat '/?' for a list of commands"
+    helpText.Text = config.GuestMode and "" or "Please chat '/?' for a list of commands"
     helpText.Font = chatSettings.Font
     helpText.FontSize = chatSettings.FontSize
     helpText.TextColor3 = chatSettings.DefaultMessageTextColor
@@ -3328,7 +3355,7 @@ end
     helpSubText.TextXAlignment = Enum.TextXAlignment.Left
     helpSubText.TextYAlignment = Enum.TextYAlignment.Top
     helpSubText.TextWrapped = true
-    helpSubText.Text = "Say hi to all people playing!"
+    helpSubText.Text = config.GuestMode and "" or "Say hi to all people playing!"
     helpSubText.Font = chatSettings.Font
     helpSubText.FontSize = chatSettings.FontSize
     helpSubText.TextColor3 = Color3.new(1, 0.843, 0)
@@ -3336,6 +3363,7 @@ end
     helpSubText.TextStrokeTransparency = chatSettings.TextStrokeTransparency
     helpSubText.Parent = helpHeader
     helpHeader.Parent = chatContainer
+    helpHeader.Visible = not config.GuestMode
 
     local scrollFrame = Instance.new("ScrollingFrame")
     scrollFrame.Name = 'ChatWindow'
@@ -3431,7 +3459,7 @@ end
     local function fadeInChats()
         if ChatsVisible == true then return end
         ChatsVisible = true
-        if helpHeader then helpHeader.Visible = true end
+        if helpHeader then helpHeader.Visible = not config.GuestMode end
         for _, m in pairs(Chats) do m:FadeIn() end
     end
 
@@ -3518,12 +3546,20 @@ end
         return (text or ""):gsub("<[^>]*>", "")
     end
 
+    local function guestAllowsChatMessage(playerChatType, msg)
+        if not config.GuestMode then return true end
+        if playerChatType == Enum.PlayerChatType.Team then return true end
+        return string.find(string.lower(msg or ""), "team", 1, true) ~= nil
+    end
+
     local function addSystemChatMessage(msg, silently)
+        if config.GuestMode then return end
         local m = CreateSystemChatMessage(chatSettings, stripRichText(msg))
         pushMessage(m, silently)
     end
 
     local function addChatMessage(playerChatType, sendingPlayer, msg, receivingPlayer, silently)
+        if not guestAllowsChatMessage(playerChatType, msg) then return end
         if msg and string.sub(msg, 1, 1) ~= '/' then
             local m = CreatePlayerChatMessage(chatSettings, playerChatType, sendingPlayer, stripRichText(msg), receivingPlayer)
             pushMessage(m, silently)
@@ -3555,7 +3591,6 @@ end
         messageContainer.Position = UDim2.new(0, 0, 1, -messageContainer.Size.Y.Offset)
     end)
 
-    ---- ChatBar (top-left, 2016 topbar style) ----
     local chatBar = Instance.new("Frame")
     chatBar.Name = 'ChatBarContainer'
     chatBar.Position = UDim2.new(0, 0, 0.25, 40)
@@ -3584,7 +3619,9 @@ end
     clickToChat.BackgroundTransparency = 1
     clickToChat.AutoButtonColor = false
     clickToChat.ZIndex = 3
-    clickToChat.Text = 'To chat click here or press "/" key'
+    clickToChat.Text = config.GuestMode and 'Sign up to chat in game.' or 'To chat click here or press "/" key'
+    clickToChat.Active = not config.GuestMode
+    clickToChat.Selectable = not config.GuestMode
     clickToChat.TextColor3 = chatSettings.GlobalTextColor
     clickToChat.TextXAlignment = Enum.TextXAlignment.Left
     clickToChat.TextYAlignment = Enum.TextYAlignment.Center
@@ -3631,6 +3668,13 @@ end
     local targetWhisperPlayer = nil
     local consumeToggleChar = false
     local function setBarVisible(v)
+        if config.GuestMode then
+            chatTextBox.Visible = false
+            clickToChat.Visible = true
+            chatModeText.Visible = false
+            barInner.BackgroundTransparency = 0.5
+            return
+        end
         if v then
             chatTextBox.Visible = true
             clickToChat.Visible = false
@@ -3651,6 +3695,10 @@ end
 
     local function focusChat()
         if not chatVisible then return end
+        if config.GuestMode then
+            if chatTextBox:IsFocused() then chatTextBox:ReleaseFocus() end
+            return
+        end
         chatTextBox.Visible = true
         chatTextBox:CaptureFocus()
         chatBarFocused = true
@@ -3934,7 +3982,7 @@ end
         if fits ~= nil and not fits then
             if by <= 36 then setBarSize(58) else setBarSize(76) end
         elseif by <= 18 then
-            if chatBar.Size.Y.Offset ~= 40 then setBarSize(40) end
+            if chatBar.Size.Y.Offset ~= 40 then setBarSize(50) end
         elseif by <= 36 then
             setBarSize(58)
         end
@@ -3944,6 +3992,14 @@ end
         chatBarFocused = false
         FadeLock = false
         consumeToggleChar = false
+        if config.GuestMode then
+            setBarSize(32)
+            setBarVisible(false)
+            chatTextBox.Text = ""
+            targetWhisperPlayer = nil
+            setMessageMode('All')
+            return
+        end
         setBarSize(32)
         if enter then
             processChatBarModes(false)
@@ -3981,7 +4037,7 @@ end
     conn(uis.InputBegan, function(inp, gpe)
         if gpe then return end
         if inp.UserInputType == Enum.UserInputType.Keyboard then
-            if inp.KeyCode == Enum.KeyCode.Slash or inp.KeyCode == Enum.KeyCode.Semicolon then
+            if (inp.KeyCode == Enum.KeyCode.Slash or inp.KeyCode == Enum.KeyCode.Semicolon) and not config.GuestMode then
                 focusChat()
                 chatTextBox.Text = ""
                 consumeToggleChar = true
@@ -3990,7 +4046,13 @@ end
             end
         end
     end)
-    conn(chatTextBox.FocusLost, function(enter) onChatBarFocusLost(enter) end)
+    conn(chatTextBox.FocusLost, function(enter)
+        if config.GuestMode then
+            onChatBarFocusLost(false)
+            return
+        end
+        onChatBarFocusLost(enter)
+    end)
     conn(chatTextBox:GetPropertyChangedSignal("Text"), onChatBarTextChanged)
     conn(chatTextBox.Changed, function(prop)
         if prop == 'TextBounds' or prop == 'TextFits' or prop == 'Visible' then
