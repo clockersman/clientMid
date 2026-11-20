@@ -177,7 +177,7 @@ local config = {
 
 -- MAIN CODE
 
-wait(5)
+wait(2)
 
 -- Services (All)
 
