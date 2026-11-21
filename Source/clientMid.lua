@@ -41,7 +41,7 @@ local config = {
         --topbar shit
 
         Topbar_Bg_Color = Color3.fromRGB(31, 31, 31),
-        Topbar_Bg_Transparency = 1,
+        Topbar_Bg_Transparency = 0.5, -- when set to 1, you can click outside the topbar frame (basically yay now i can click buttons that are underneath the topbar!! :D)
 
         -- playerlist
         Entry_Pad = 2,
@@ -104,10 +104,10 @@ local config = {
     ShowHealthBar = true,
 
     -- Chat
-    ChatTeamIndicator = false,
+    ChatTeamIndicator = true,
 
     -- guest mode
-    GuestMode = true,
+    GuestMode = false,
     -- when true, a username like "Guest8827" or "Geust8827" becomes "Guest 8827";
     -- when false, the local player always gets a random Guest number
     UsernamePatch = false,
