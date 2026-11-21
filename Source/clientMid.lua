@@ -1459,9 +1459,9 @@ local function createTeamEntry(team)
     local teamEntry = {}
     teamEntry.Team = team
     teamEntry.TeamScore = 0
-    local containerFrame, entryFrame = createEntryFrame(team.Name, config.TopbarConstants.Team_Entry_Size_Y)
+    local containerFrame, entryFrame = createEntryFrame(team.Name, config.TopbarConstants.Team_Entry_Size_Y, true)
     entryFrame.BackgroundColor3 = team.TeamColor.Color
-    local teamName = createEntryNameText("TeamName", team.Name, entryFrame.AbsoluteSize.x, 1)
+    local teamName = createEntryNameText("TeamName", team.Name, config.TopbarConstants.Name_Entry_Size_X, 1)
     teamName.Parent = entryFrame
     teamEntry.Frame = containerFrame
     conn(team.Changed, function(property)
@@ -1627,23 +1627,22 @@ local function updateAllTeamScores()
 end
 
 
-local function updateTeamEntry(entry)
 
+local function updateTeamEntry(entry)
     local frame = entry.Frame
     local color = entry.Team.TeamColor.Color
     local offset = config.TopbarConstants.Name_Entry_Size_X
 
     for _, stat in ipairs(GameStats) do
-
         local statFrame = frame:FindFirstChild(stat.Name)
 
         if not statFrame then
-
             statFrame = createStatFrame(offset, frame, stat.Name)
             statFrame.BackgroundColor3 = color
             createStatText(statFrame, "", false)
-
         end
+
+        statFrame.BackgroundColor3 = color
 
         statFrame.Position = UDim2.new(
             0,
@@ -1653,7 +1652,6 @@ local function updateTeamEntry(entry)
         )
 
         offset = offset + statFrame.Size.X.Offset + config.TopbarConstants.Tile_Spacing
-
     end
 
     local bgFrame = frame:FindFirstChild("BGFrame")
@@ -1668,7 +1666,6 @@ local function updateTeamEntry(entry)
 
         bgFrame.BackgroundColor3 = color
     end
-
 end
 
 local function initializeStatText(stat, statObject, entry, statFrame)
