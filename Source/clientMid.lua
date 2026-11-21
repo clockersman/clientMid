@@ -541,7 +541,8 @@ topbarbg.Position = UDim2.new(0, 0, 0, 0)
 topbarbg.BackgroundColor3 = config.TopbarConstants.Topbar_Bg_Color
 topbarbg.BackgroundTransparency = config.TopbarConstants.Topbar_Bg_Transparency
 topbarbg.BorderSizePixel = 0
-topbarbg.Active = true
+topbarbg.Active = config.TopbarConstants.Topbar_Bg_Transparency < 1
+topbarbg.Visible = config.TopbarConstants.Topbar_Bg_Transparency < 1
 topbarbg.Parent = screenGui
 
 -- gui code
@@ -582,7 +583,7 @@ if dis("Automatic") then
     end
 end
 
-topbarbg.Visible = not dis("Topbar_Bg")
+topbarbg.Visible = not dis("Topbar_Bg") and config.TopbarConstants.Topbar_Bg_Transparency < 1
 
 local function setgi()
     pcall(function()
@@ -2265,6 +2266,8 @@ local function sethubvis(v)
         shield.Visible = true
         shield:TweenPosition(UDim2.new(0, 0, 0, 0), Enum.EasingDirection.InOut, Enum.EasingStyle.Quart, 0.5, true)
         topbarbg.BackgroundTransparency = 0
+        topbarbg.Active = true
+        topbarbg.Visible = true
         Container.Visible = false
         hidepop()
         for _, t in ipairs(hubHiddenTargets) do
@@ -2278,6 +2281,8 @@ local function sethubvis(v)
             if not hubopen then shield.Visible = false end
         end)
         topbarbg.BackgroundTransparency = config.TopbarConstants.Topbar_Bg_Transparency
+        topbarbg.Active = config.TopbarConstants.Topbar_Bg_Transparency < 1
+        topbarbg.Visible = not dis("Topbar_Bg") and config.TopbarConstants.Topbar_Bg_Transparency < 1
         Container.Visible = not dis("PlayerList")
         for _, t in ipairs(hubHiddenTargets) do
             if hubPrevState[t] ~= nil then
