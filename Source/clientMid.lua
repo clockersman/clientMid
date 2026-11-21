@@ -87,6 +87,7 @@ local config = {
     ChatToggle = {
         Enabled = true,
         KeyCode = Enum.KeyCode.C,
+        OpenKeyCode = Enum.KeyCode.Slash,
     },
     
     -- playerlist 
@@ -542,7 +543,7 @@ topbarbg.BackgroundColor3 = config.TopbarConstants.Topbar_Bg_Color
 topbarbg.BackgroundTransparency = config.TopbarConstants.Topbar_Bg_Transparency
 topbarbg.BorderSizePixel = 0
 topbarbg.Active = config.TopbarConstants.Topbar_Bg_Transparency < 1
-topbarbg.Visible = config.TopbarConstants.Topbar_Bg_Transparency < 1
+topbarbg.Visible = true
 topbarbg.Parent = screenGui
 
 -- gui code
@@ -583,7 +584,9 @@ if dis("Automatic") then
     end
 end
 
-topbarbg.Visible = not dis("Topbar_Bg") and config.TopbarConstants.Topbar_Bg_Transparency < 1
+topbarbg.Visible = true
+topbarbg.BackgroundTransparency = dis("Topbar_Bg") and 1 or config.TopbarConstants.Topbar_Bg_Transparency
+topbarbg.Active = not dis("Topbar_Bg") and config.TopbarConstants.Topbar_Bg_Transparency < 1
 
 local function setgi()
     pcall(function()
@@ -822,7 +825,7 @@ ScrollList.BackgroundTransparency = 1
 ScrollList.BackgroundColor3 = Color3.new()
 ScrollList.BorderSizePixel = 0
 ScrollList.CanvasSize = UDim2.new(0, 0, 0, 0)
-ScrollList.ScrollBarThickness = 6
+ScrollList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ScrollList.BottomImage = config.Assets.Scroll_Bottom
 ScrollList.MidImage = config.Assets.Scroll_Mid
 ScrollList.TopImage = config.Assets.Scroll_Top
@@ -869,16 +872,22 @@ local function getplname(plr)
     return plr.Name
 end
 
-local function createEntryFrame(name, sizeYOffset)
+
+local function createEntryFrame(name, sizeYOffset, isTeamHeader)
     local containerFrame = Instance.new("Frame")
+
     containerFrame.Name = name
     containerFrame.Size = UDim2.new(1, 0, 0, sizeYOffset)
     containerFrame.BackgroundTransparency = 1
     containerFrame.ZIndex = 1
 
     local nameFrame = Instance.new("TextButton")
+
     nameFrame.Name = "BGFrame"
-    nameFrame.Size = UDim2.new(0, config.TopbarConstants.Name_Entry_Size_X, 0, sizeYOffset)
+    nameFrame.Size = isTeamHeader
+        and UDim2.new(1, 0, 0, sizeYOffset)
+        or UDim2.new(0, config.TopbarConstants.Name_Entry_Size_X, 0, sizeYOffset)
+
     nameFrame.BackgroundTransparency = config.TopbarConstants.Bg_Transparency
     nameFrame.BackgroundColor3 = config.TopbarConstants.Bg_Color
     nameFrame.BorderSizePixel = 0
@@ -1069,10 +1078,13 @@ end
 
 local function setPlayerEntryPositions()
     local position = 0
+
     for i = 1, #PlayerEntries do
         PlayerEntries[i].Frame.Position = UDim2.new(0, 0, 0, position)
         position = position + config.TopbarConstants.Player_Entry_Size_Y + config.TopbarConstants.Tile_Spacing
     end
+
+    return position
 end
 
 local function setTeamEntryPositions()
@@ -1118,26 +1130,20 @@ local function setTeamEntryPositions()
             NeutralTeam.Frame.Visible = false
         end
     end
+    return position
 end
 
 local function setEntryPositions()
     table.sort(PlayerEntries, sortPlayerEntries)
+
     if #TeamEntries > 0 then
-        setTeamEntryPositions()
+        return setTeamEntryPositions()
     else
-        setPlayerEntryPositions()
+        return setPlayerEntryPositions()
     end
 end
 
 local function setScrollListSize()
-    local teamSize = #TeamEntries * config.TopbarConstants.Team_Entry_Size_Y
-    local playerSize = #PlayerEntries * config.TopbarConstants.Player_Entry_Size_Y
-    local spacing = #PlayerEntries * config.TopbarConstants.Entry_Pad + #TeamEntries * config.TopbarConstants.Entry_Pad
-    local canvasSize = teamSize + playerSize + spacing
-    if #TeamEntries > 0 and NeutralTeam and IsShowingNeutralFrame then
-        canvasSize = canvasSize + config.TopbarConstants.Team_Entry_Size_Y + config.TopbarConstants.Entry_Pad
-    end
-    ScrollList.CanvasSize = UDim2.new(0, 0, 0, canvasSize)
     ScrollList.Size = UDim2.new(1, 0, 1, 0)
     setEntryPositions()
 end
@@ -1620,20 +1626,49 @@ local function updateAllTeamScores()
     end
 end
 
+
 local function updateTeamEntry(entry)
+
     local frame = entry.Frame
     local color = entry.Team.TeamColor.Color
     local offset = config.TopbarConstants.Name_Entry_Size_X
+
     for _, stat in ipairs(GameStats) do
+
         local statFrame = frame:FindFirstChild(stat.Name)
+
         if not statFrame then
+
             statFrame = createStatFrame(offset, frame, stat.Name)
             statFrame.BackgroundColor3 = color
-            createStatText(statFrame, "", false, true)
+            createStatText(statFrame, "", false)
+
         end
-        statFrame.Position = UDim2.new(0, offset + config.TopbarConstants.Tile_Spacing, 0, 0)
+
+        statFrame.Position = UDim2.new(
+            0,
+            offset + config.TopbarConstants.Tile_Spacing,
+            0,
+            0
+        )
+
         offset = offset + statFrame.Size.X.Offset + config.TopbarConstants.Tile_Spacing
+
     end
+
+    local bgFrame = frame:FindFirstChild("BGFrame")
+
+    if bgFrame then
+        bgFrame.Size = UDim2.new(
+            0,
+            offset,
+            0,
+            config.TopbarConstants.Team_Entry_Size_Y
+        )
+
+        bgFrame.BackgroundColor3 = color
+    end
+
 end
 
 local function initializeStatText(stat, statObject, entry, statFrame)
@@ -1723,9 +1758,10 @@ local function tog()
 end
 conn(nhc.MouseButton1Click, function() tog() end)
 
-conn(uis.InputBegan, function(inp, gpe)
-    if gpe then return end
-    if inp.KeyCode == Enum.KeyCode.Tab then tog() end
+conn(uis.InputBegan, function(inp)
+    if inp.KeyCode ~= Enum.KeyCode.Tab then return end
+    if uis:GetFocusedTextBox() then return end
+    tog()
 end)
 
 conn(uis.InputBegan, function(inp, gpe)
@@ -2260,30 +2296,62 @@ switchpage = function(pg)
     botbar.Visible = chrome
 end
 
+
+local originalTopbarTransparency = topbarbg.BackgroundTransparency
+local originalTopbarActive = topbarbg.Active
+
 local function sethubvis(v)
     hubopen = v
+
     if v then
         shield.Visible = true
-        shield:TweenPosition(UDim2.new(0, 0, 0, 0), Enum.EasingDirection.InOut, Enum.EasingStyle.Quart, 0.5, true)
+
+        shield:TweenPosition(
+            UDim2.new(0, 0, 0, 0),
+            Enum.EasingDirection.InOut,
+            Enum.EasingStyle.Quart,
+            0.5,
+            true
+        )
+
         topbarbg.BackgroundTransparency = 0
         topbarbg.Active = true
         topbarbg.Visible = true
+
         Container.Visible = false
+
         hidepop()
+
         for _, t in ipairs(hubHiddenTargets) do
             hubPrevState[t] = t.Visible
             t.Visible = false
         end
-        if not curpage and pages[1] then switchpage(pages[1]) end
+
+        if not curpage and pages[1] then
+            switchpage(pages[1])
+        end
+
     else
         menustack = {}
-        shield:TweenPosition(UDim2.new(0, 0, -1, -36), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.4, true, function()
-            if not hubopen then shield.Visible = false end
-        end)
-        topbarbg.BackgroundTransparency = config.TopbarConstants.Topbar_Bg_Transparency
-        topbarbg.Active = config.TopbarConstants.Topbar_Bg_Transparency < 1
-        topbarbg.Visible = not dis("Topbar_Bg") and config.TopbarConstants.Topbar_Bg_Transparency < 1
+
+        shield:TweenPosition(
+            UDim2.new(0, 0, -1, -36),
+            Enum.EasingDirection.In,
+            Enum.EasingStyle.Quad,
+            0.4,
+            true,
+            function()
+                if not hubopen then
+                    shield.Visible = false
+
+                    topbarbg.BackgroundTransparency = originalTopbarTransparency
+                    topbarbg.Active = originalTopbarActive
+                end
+            end
+        )
+
         Container.Visible = not dis("PlayerList")
+
         for _, t in ipairs(hubHiddenTargets) do
             if hubPrevState[t] ~= nil then
                 t.Visible = hubPrevState[t]
@@ -2291,8 +2359,10 @@ local function sethubvis(v)
             end
         end
     end
+
     hamicon.Image = v and config.Assets.Hamburger_Down or config.Assets.Hamburger
 end
+
 
 local function togglesettings()
     sethubvis(not hubopen)
@@ -4782,27 +4852,27 @@ local modesOption = gearOption("Modes", 38, 30)
         updateIcon(open)
     end
 
-    if config.ChatToggle.Enabled then
-        local UIS = game:GetService("UserInputService")
-        local chatHidden = false
+    
 
-        local function applyChatHidden()
-            chatIconButton.Visible = not chatHidden
-            chatContainer.Visible = not chatHidden
-            chatBar.Visible = not chatHidden
-            if chatHidden and stopResize then stopResize() end
-            layoutTopbarIcons()
+
+if config.ChatToggle.Enabled then
+    local UIS = game:GetService("UserInputService")
+
+    conn(UIS.InputBegan, function(input, gameProcessed)
+        if gameProcessed then return end
+
+        if input.KeyCode ~= config.ChatToggle.KeyCode then return end
+
+        if not (
+            UIS:IsKeyDown(Enum.KeyCode.LeftAlt)
+            or UIS:IsKeyDown(Enum.KeyCode.RightAlt)
+        ) then
+            return
         end
 
-        UIS.InputBegan:Connect(function(input, gameProcessed)
-            if gameProcessed then return end
-            if input.KeyCode ~= config.ChatToggle.KeyCode then return end
-            if not (UIS:IsKeyDown(Enum.KeyCode.LeftAlt)
-                or UIS:IsKeyDown(Enum.KeyCode.RightAlt)) then return end
-            chatHidden = not chatHidden
-            applyChatHidden()
-        end)
-    end
+        setChatOpen(not chatVisible)
+    end)
+end
 
     if G.clientMid and G.clientMid.Chat then
         G.clientMid.Chat.focus = focusChat
