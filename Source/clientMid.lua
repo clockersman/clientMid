@@ -22,6 +22,18 @@ Version = 0.1.0
 
 local config = {
     Platform = "Desktop",
+    Pre2022Materials = true,
+    OldAnimations = true,
+    OldCamera = false, --beta
+
+    PluginRepos = {
+        {
+            Name = "Wiiblox",
+            URL = "https://cm.wiiblox.com",
+            Manifest = "plugins/manifest.lua",
+            Download = "store_plugins/%s",
+        },
+    },
 
     -- topbar
 
@@ -29,7 +41,7 @@ local config = {
         --topbar shit
 
         Topbar_Bg_Color = Color3.fromRGB(31, 31, 31),
-        Topbar_Bg_Transparency = 0.5,
+        Topbar_Bg_Transparency = 1,
 
         -- playerlist
         Entry_Pad = 2,
@@ -95,7 +107,9 @@ local config = {
     ChatTeamIndicator = false,
 
     -- guest mode
-    GuestMode = false,
+    GuestMode = true,
+    -- when true, a username like "Guest8827" or "Geust8827" becomes "Guest 8827";
+    -- when false, the local player always gets a random Guest number
     UsernamePatch = false,
 
     Assets = {
@@ -179,9 +193,13 @@ local config = {
     }
 }
 
--- MAIN CODE
+-- LOADSTRINGS / OTHER
 
-wait(2)
+if config.OldCamera then
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/clockersman/clientMid/refs/heads/main/Source/other/camera.luau"))() -- camera
+end
+
+-- MAIN CODE
 
 -- Services (All)
 
@@ -189,6 +207,8 @@ local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
+local MaterialService = game:GetService("MaterialService")
+local HttpService = game:GetService("HttpService")
 
 local G = (getgenv and getgenv()) or {}
 G.clientMidRun = (G.clientMidRun or 0) + 1
@@ -245,6 +265,198 @@ G.clientMidGuest.displayName = function(plr)
         return "Guest " .. tostring(guestState.number)
     end
     return nil
+end
+
+-- PBR materials: legacy material variants using 2024 PBR maps
+if config.Pre2022Materials and MaterialService then
+    local PREFIX = "Pre2022Materials_"
+    local TILE_SIZE = 5
+
+    local materials = {
+        Foil = {
+            MetalnessMap = "75538391370277",
+            NormalMap = "98087989530580",
+            RoughnessMap = "73260497866168",
+        },
+        Brick = {
+            ColorMap = "93226908589715",
+            NormalMap = "93226908589715",
+            RoughnessMap = "128213933866991",
+        },
+        Cobblestone = {
+            ColorMap = "73358231067232",
+            NormalMap = "115413128663127",
+            RoughnessMap = "88543944841461",
+        },
+        Concrete = {
+            ColorMap = "99156369756865",
+            NormalMap = "106627473782897",
+            RoughnessMap = "70952396725857",
+        },
+        DiamondPlate = {
+            ColorMap = "139807446232608",
+            MetalnessMap = "74547363007218",
+            NormalMap = "99575653945949",
+            RoughnessMap = "85570151261836",
+        },
+        Fabric = {
+            ColorMap = "137638567598413",
+            NormalMap = "94964622753275",
+            RoughnessMap = "100020052606029",
+        },
+        Granite = {
+            ColorMap = "78479760051022",
+            RoughnessMap = "116977679001367",
+        },
+        Grass = {
+            ColorMap = "130776495441534",
+            NormalMap = "120894268438273",
+            RoughnessMap = "122237885447279",
+        },
+        Ice = {
+            NormalMap = "113080701909221",
+            RoughnessMap = "137844202742618",
+        },
+        Marble = {
+            ColorMap = "120845418079506",
+            RoughnessMap = "73834564522334",
+        },
+        Metal = {
+            ColorMap = "88119345077580",
+            MetalnessMap = "103657958704269",
+            NormalMap = "79641423986898",
+            RoughnessMap = "122496696552284",
+        },
+        Pebble = {
+            ColorMap = "120258473652152",
+            RoughnessMap = "131952260359690",
+        },
+        CorrodedMetal = {
+            ColorMap = "96713043913476",
+            NormalMap = "104514476827007",
+            RoughnessMap = "79806444721644",
+        },
+        Sand = {
+            ColorMap = "88459507394901",
+            NormalMap = "119796798925716",
+            RoughnessMap = "137658122216807",
+        },
+        Slate = {
+            ColorMap = "80930948084175",
+            NormalMap = "71195904079666",
+            RoughnessMap = "97972733451501",
+        },
+        SmoothPlastic = {
+            RoughnessMap = "76297528483226",
+        },
+        Wood = {
+            ColorMap = "122559054549707",
+            NormalMap = "101652537232591",
+            RoughnessMap = "83689818302365",
+        },
+        WoodPlanks = {
+            ColorMap = "106028192909295",
+            MetalnessMap = "78252206090856",
+            NormalMap = "100946439730332",
+            RoughnessMap = "80941274056553",
+        },
+    }
+
+    for _, oldVariant in ipairs(MaterialService:GetChildren()) do
+        if oldVariant:IsA("MaterialVariant") and oldVariant.Name:sub(1, #PREFIX) == PREFIX then
+            pcall(function()
+                MaterialService:SetBaseMaterialOverride(oldVariant.BaseMaterial, "")
+            end)
+            oldVariant:Destroy()
+        end
+    end
+
+    for materialName, maps in pairs(materials) do
+        local baseMaterial = Enum.Material[materialName]
+        if baseMaterial then
+            local variant = Instance.new("MaterialVariant")
+            variant.Name = PREFIX .. materialName
+            variant.BaseMaterial = baseMaterial
+            variant.Parent = MaterialService
+
+            local success = pcall(function()
+                variant.StudsPerTile = TILE_SIZE
+                for property, assetId in pairs(maps) do
+                    variant[property] = "rbxassetid://" .. assetId
+                end
+                MaterialService:SetBaseMaterialOverride(baseMaterial, variant.Name)
+            end)
+            if not success then
+                variant:Destroy()
+            end
+        end
+    end
+end
+
+if config.OldAnimations then
+    local anims = {
+        idle = {
+            "507766666",
+            "507766951"
+        },
+        walk = "507777826",
+        run = "507767714",
+        jump = "507765000",
+        fall = "507767968",
+        climb = "507765644",
+        sit = "2506281703",
+        swim = "507784897",
+        swimidle = "507785072"
+    }
+    local function isR6(char)
+        if not char then return false end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            local ok, rig = pcall(function() return humanoid.RigType end)
+            if ok then return rig == Enum.HumanoidRigType.R6 end
+        end
+        return char:FindFirstChild("UpperTorso") == nil and char:FindFirstChild("HumanoidRootPart") ~= nil
+    end
+    local function applyAnimation(animName, animId, char)
+        char = char or (Player and Player.Character)
+        local animateScript = char and char:FindFirstChild("Animate")
+        if not animateScript then return end
+        local animFolder = animateScript:FindFirstChild(animName)
+        if not animFolder then
+            for _, child in ipairs(animateScript:GetChildren()) do
+                if child:IsA("Folder") and string.lower(child.Name) == string.lower(animName) then
+                    animFolder = child
+                    break
+                end
+            end
+        end
+        if animFolder then
+            for _, obj in ipairs(animFolder:GetChildren()) do
+                if obj:IsA("Animation") then
+                    obj.AnimationId = "rbxassetid://" .. animId
+                end
+            end
+        end
+    end
+    local function applyAllAnimations(character)
+        local char = character or (Player and Player.Character)
+        if isR6(char) then return end
+        for animType, animId in pairs(anims) do
+            if typeof(animId) == "table" then
+                for _, id in ipairs(animId) do
+                    applyAnimation(animType, id, char)
+                end
+            else
+                applyAnimation(animType, animId, char)
+            end
+        end
+    end
+    Player.CharacterAdded:Connect(function(character)
+        delay(1, function() applyAllAnimations(character) end)
+    end)
+    if Player.Character then
+        delay(1, function() applyAllAnimations(Player.Character) end)
+    end
 end
 
 -- CoreGui deletion
@@ -2316,6 +2528,112 @@ end
 
 local plugrefresh = nil
 
+G.clientMid.HttpGet = function(url)
+    pcall(function() HttpService.HttpEnabled = true end)
+    if type(HttpService) == "table" and type(HttpService.GetAsync) == "function" then
+        local ok, body = pcall(HttpService.GetAsync, HttpService, url)
+        if ok and type(body) == "string" and body ~= "" then return body end
+    end
+    if game then
+        local ok, body = pcall(function() return game:HttpGet(url) end)
+        if ok and type(body) == "string" and body ~= "" then return body end
+    end
+    local req
+    if type(syn) == "table" and type(syn.request) == "function" then req = syn.request
+    elseif type(request) == "function" then req = request
+    elseif type(http_request) == "function" then req = http_request end
+    if req then
+        local ok, res = pcall(req, {Url = url, Method = "GET"})
+        if ok then
+            if type(res) == "table" then
+                local body = res.Body or res.body
+                if type(body) == "string" and body ~= "" then return body end
+            elseif type(res) == "string" and res ~= "" then return res end
+        end
+    end
+    return nil
+end
+
+local function plugread(repo, path)
+    path = tostring(path or ""):gsub("^/+", "")
+    if repo and repo.URL then
+        local full = path:match("^https?://") and path or (repo.URL:gsub("/$", "") .. "/" .. path)
+        local body = G.clientMid.HttpGet(full)
+        if body then return true, body end
+    end
+    if repo and repo.Path and fsok then
+        local full = repo.Path .. "/" .. path
+        if isfile(full) then return true, readfile(full) end
+    end
+    return false
+end
+
+local function plugreadjson(repo, path)
+    local ok, body = plugread(repo, path)
+    if not ok then return nil end
+    local good, data = pcall(function() return HttpService:JSONDecode(body) end)
+    if good and type(data) == "table" then return data end
+    return nil
+end
+
+local function plugloadrepo(repo, name)
+    local ok, body = plugread(repo, string.format(repo.Download or ("plugins/%s.cmplug"), name))
+    if not ok then return false, "download failed" end
+    local t = plugdec(body)
+    if not t then return false, "bad plugin archive" end
+    return plugload(t)
+end
+
+local function plugloadremote(repo, plugin)
+    local path = plugin.download or string.format(repo.Download or "store_plugins/%s", plugin.id or plugin.name or plugin.title)
+    local ok, body = plugread(repo, path)
+    if not ok then return false, "download failed" end
+    local t = plugdec(body)
+    if not t then return false, "bad plugin archive" end
+    return plugload(t)
+end
+
+local function plugrefreshrepos()
+    for _, repo in ipairs(config.PluginRepos) do
+        if repo.API then
+            local data = plugreadjson(repo, repo.API)
+            if data then
+                for _, plugin in ipairs(data) do
+                    local name = plugin.id or plugin.name or plugin.title
+                    if name then
+                        local key = repo.Name .. ":" .. name
+                        if not disabledplugs[key] and not loadedplugs[name] then pcall(plugloadremote, repo, plugin) end
+                    end
+                end
+            end
+        else
+            local ok, body = plugread(repo, repo.Manifest or "plugins/manifest.lua")
+            if ok then
+                local fn, err = loadstring(body)
+                if fn then
+                    local ok2, entries = pcall(fn)
+                    if ok2 and type(entries) == "table" then
+                        for _, entry in ipairs(entries) do
+                            if type(entry) == "table" then
+                                local name = entry.id or entry.name or entry.title
+                                if name then
+                                    local key = repo.Name .. ":" .. name
+                                    if not disabledplugs[key] and not loadedplugs[name] then pcall(plugloadremote, repo, entry) end
+                                end
+                            else
+                                local name = entry
+                                local key = repo.Name .. ":" .. name
+                                if not disabledplugs[key] and not loadedplugs[name] then pcall(plugloadrepo, repo, name) end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if plugrefresh then plugrefresh() end
+end
+
 local sfx = Instance.new("Folder")
 sfx.Name = "ClientMidSFX"
 pcall(function() sfx.Parent = workspace end)
@@ -2335,9 +2653,13 @@ local function buildplugins(page)
     local openplugs = {}
     local statusmsg = ""
 
-    mktitle(page, "PluginsTitle", "Plugins", UDim2.new(0, 10, 0, 5), UDim2.new(1, -220, 0, 36))
+    mktitle(page, "PluginsTitle", "Installed Plugins", UDim2.new(0, 10, 0, 5), UDim2.new(1, -220, 0, 36))
     mkbtn2(page, "BuyPlugins", "Buy Plugins", UDim2.new(1, -210, 0, 10), UDim2.new(0, 200, 0, 56), function()
-        playsnd("5751743646")
+        local sp = G.clientMid.StorePage
+        if sp then
+            switchpage(sp)
+            if sp.LoadStore then delay(0, function() pcall(sp.LoadStore) end) end
+        end
     end)
     local stat = mklab(page, "PluginStatus", "", UDim2.new(0, 10, 0, 46), UDim2.new(1, -20, 0, 14), false)
 
@@ -2551,6 +2873,100 @@ local function buildplugins(page)
     plugrefresh = function() renderrows() end
     renderrows()
     return 640
+end
+
+local function buildstore(page)
+    local statusmsg = ""
+
+    mktitle(page, "StorePageTitle", "Store", UDim2.new(0, 10, 0, 5), UDim2.new(1, -220, 0, 36))
+    mkbtn2(page, "BackToPlugins", "Back", UDim2.new(1, -210, 0, 10), UDim2.new(0, 200, 0, 56), function()
+        if G.clientMid.PluginsTab then switchpage(G.clientMid.PluginsTab) end
+    end)
+    local stat = mklab(page, "StoreStatus", "", UDim2.new(0, 10, 0, 46), UDim2.new(1, -20, 0, 14), false)
+
+    local content = Instance.new("ScrollingFrame")
+    content.Name = "StoreContent"
+    content.Position = UDim2.new(0, 0, 0, 64)
+    content.Size = UDim2.new(1, 0, 1, -64)
+    content.BackgroundTransparency = 1
+    content.BorderSizePixel = 0
+    content.ScrollBarThickness = 6
+    content.CanvasSize = UDim2.new(0, 0, 0, 0)
+    content.Parent = page
+
+    local function status(s)
+        statusmsg = s
+        if stat then stat.Text = s end
+    end
+
+    local function loadStore()
+        local count = 0
+        local y = 4
+        for _, c in pairs(content:GetChildren()) do c:Destroy() end
+        for _, repo in ipairs(config.PluginRepos) do
+            local ok, body = plugread(repo, repo.Manifest or "plugins/manifest.lua")
+            if ok then
+                local fn = loadstring(body)
+                if fn then
+                    local good, entries = pcall(fn)
+                    if good and type(entries) == "table" then
+                        for _, entry in ipairs(entries) do
+                            if type(entry) == "table" then
+                                local title = entry.title or entry.name or entry.id or "plugin"
+                                local desc = entry.desc or ""
+                                local author = entry.author or ""
+                                local card = Instance.new("ImageLabel")
+                                card.Name = "Store_" .. tostring(entry.id or title)
+                                card.Image = config.Assets.Dialog_White
+                                card.ScaleType = Enum.ScaleType.Slice
+                                card.SliceCenter = Rect.new(10, 10, 10, 10)
+                                card.BackgroundTransparency = 1
+                                card.ImageTransparency = 0.85
+                                card.ZIndex = 2
+                                card.Position = UDim2.new(0, 4, 0, y)
+                                card.Parent = content
+
+                                local icon = tostring(entry.icon or "")
+                                if icon ~= "" and not icon:match("^%d+$") and not icon:match("^https?://") then
+                                    icon = tostring(repo.URL or ""):gsub("/$", "") .. "/" .. icon:gsub("^/+", "")
+                                end
+                                local av = Instance.new("ImageLabel")
+                                av.Name = "Icon"
+                                av.BackgroundTransparency = 1
+                                av.Size = UDim2.new(0, 48, 0, 48)
+                                av.Position = UDim2.new(0, 10, 0, 8)
+                                av.ZIndex = 3
+                                av.Image = config.Assets.Plugins_Icon
+                                if icon ~= "" then av.Image = icon:match("^%d+$") and ("rbxassetid://" .. icon) or icon end
+                                av.Parent = card
+
+                                mklab(card, "Name", tostring(title), UDim2.new(0, 68, 0, 6), UDim2.new(1, -178, 0, 24), true).ZIndex = 3
+                                mklab(card, "Desc", tostring(desc), UDim2.new(0, 68, 0, 30), UDim2.new(1, -178, 0, 22), false).ZIndex = 3
+                                mklab(card, "Author", "by " .. tostring(author), UDim2.new(0, 68, 0, 50), UDim2.new(1, -178, 0, 18), false).ZIndex = 3
+                                mkbtn2(card, "Get", "Get", UDim2.new(1, -102, 0, 15), UDim2.new(0, 92, 0, 34), function()
+                                    local good2, err2 = pcall(plugloadremote, repo, entry)
+                                    if good2 and err2 then
+                                        status("installed: " .. tostring(title))
+                                        if plugrefresh then plugrefresh() end
+                                    else
+                                        status("failed: " .. tostring(title))
+                                    end
+                                end)
+
+                                card.Size = UDim2.new(1, -8, 0, 74)
+                                y = y + 84
+                                count = count + 1
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        content.CanvasSize = UDim2.new(0, 0, 0, y)
+        if count > 0 then status(count .. " store plugin(s)") else status("store unavailable") end
+    end
+
+    return 640, loadStore
 end
 
 local function frst(plr)
@@ -2773,7 +3189,15 @@ addpage("Record", config.Assets.RecordTab_Icon, function(page)
     return 300
 end, {w = 130, iw = 41, ih = 40, ix = 5, iy = -20})
 
-local plugtab = addpage("Plugins", config.Assets.Plugins_Icon, buildplugins, {w = 110, iw = 33, ih = 33, ix = 10, iy = -16})
+G.clientMid.PluginsTab = addpage("Plugins", config.Assets.Plugins_Icon, buildplugins, {w = 110, iw = 33, ih = 33, ix = 10, iy = -16})
+
+G.clientMid.StorePage = mkpage("Store", config.Assets.Plugins_Icon)
+G.clientMid.StorePage.TabPosition = G.clientMid.PluginsTab.TabPosition + 1
+G.clientMid.StorePage.Page.Position = UDim2.new(G.clientMid.StorePage.TabPosition - 1, 0, 0, 0)
+G.clientMid.StoreBuildOK, G.clientMid.StoreHeight, G.clientMid.StoreLoader = pcall(buildstore, G.clientMid.StorePage.Page)
+G.clientMid.StorePage.Height = (G.clientMid.StoreBuildOK and type(G.clientMid.StoreHeight) == "number") and G.clientMid.StoreHeight or 640
+G.clientMid.StorePage.Page.Size = UDim2.new(1, 0, 0, G.clientMid.StorePage.Height)
+if G.clientMid.StoreBuildOK and G.clientMid.StoreLoader then G.clientMid.StorePage.LoadStore = G.clientMid.StoreLoader end
 
 local function pushmenu()
     if curpage then
@@ -2835,6 +3259,7 @@ if fsok then
         end
     end)
     if plugrefresh then plugrefresh() end
+    pcall(plugrefreshrepos)
 end
 resizeHubBar()
 
@@ -3667,12 +4092,17 @@ end
     local messageMode = 'All'
     local targetWhisperPlayer = nil
     local consumeToggleChar = false
+    local function setBarSize(y)
+        chatBar.Size = UDim2.new(chatBar.Size.X.Scale, chatBar.Size.X.Offset, 0, y)
+    end
+
     local function setBarVisible(v)
         if config.GuestMode then
             chatTextBox.Visible = false
             clickToChat.Visible = true
             chatModeText.Visible = false
             barInner.BackgroundTransparency = 0.5
+            setBarSize(40)
             return
         end
         if v then
@@ -3689,13 +4119,10 @@ end
     end
     setBarVisible(false)
 
-    local function setBarSize(y)
-        chatBar.Size = UDim2.new(chatBar.Size.X.Scale, chatBar.Size.X.Offset, 0, y)
-    end
-
     local function focusChat()
         if not chatVisible then return end
         if config.GuestMode then
+            setBarSize(40)
             if chatTextBox:IsFocused() then chatTextBox:ReleaseFocus() end
             return
         end
@@ -3993,7 +4420,7 @@ end
         FadeLock = false
         consumeToggleChar = false
         if config.GuestMode then
-            setBarSize(32)
+            setBarSize(40)
             setBarVisible(false)
             chatTextBox.Text = ""
             targetWhisperPlayer = nil
@@ -5803,42 +6230,38 @@ end
 
 -- Top-GUI detector: pushes top GUIs that poke up too high down so they sit just below the topbar
 warn("clientMid: top-gui fixer enabled (v5, PlayerGui only)")
-local rpg = game:GetService("PlayerGui")
-local movedGuis = {}
-local screenList = {}
-local screensDirty = true
-local lastFullRefresh = 0
-local function refreshScreens()
-    screenList = {}
-    local ok, pchildren = pcall(function() return rpg:GetChildren() end)
-    if ok and type(pchildren) == "table" then
-        for _, v in ipairs(pchildren) do
+local topFix = {
+    rpg = game:GetService("PlayerGui"),
+    moved = {},
+    screens = {},
+    dirty = true,
+    last = 0,
+}
+topFix.refresh = function()
+    topFix.screens = {}
+    local ok, children = pcall(function() return topFix.rpg:GetChildren() end)
+    if ok and type(children) == "table" then
+        for _, v in ipairs(children) do
             if typeof(v) == "Instance" and v:IsA("ScreenGui") and v ~= screenGui then
-                screenList[#screenList + 1] = v
+                topFix.screens[#topFix.screens + 1] = v
             end
         end
     end
 end
-local dirtySignals = {
-    {rpg, "DescendantAdded"},
-    {rpg, "DescendantRemoved"}
-}
-for _, s in ipairs(dirtySignals) do
-    pcall(function()
-        local sig = s[1][s[2]]
-        if sig then
-            conn(sig, function(d)
-                if d:IsA("ScreenGui") then screensDirty = true end
-            end)
-        end
+pcall(function()
+    conn(topFix.rpg.DescendantAdded, function(d)
+        if d:IsA("ScreenGui") then topFix.dirty = true end
     end)
-end
-local function fixTopGuis()
+    conn(topFix.rpg.DescendantRemoved, function(d)
+        if d:IsA("ScreenGui") then topFix.dirty = true end
+    end)
+end)
+topFix.run = function()
     local now = os.clock()
-    if screensDirty or now - lastFullRefresh > 5 then
-        screensDirty = false
-        lastFullRefresh = now
-        refreshScreens()
+    if topFix.dirty or now - topFix.last > 5 then
+        topFix.dirty = false
+        topFix.last = now
+        topFix.refresh()
     end
     local res = GuiService:GetScreenResolution()
     local sw, sh = res.X, res.Y
@@ -5857,8 +6280,8 @@ local function fixTopGuis()
                 if sx > 0 and sy > 0 and apY < topY and bottom < sh * 0.9 then
                     obj.Position = obj.Position + UDim2.new(0, 0, 0, topY - apY)
                     shifted = true
-                    if not movedGuis[obj] then
-                        movedGuis[obj] = true
+                    if not topFix.moved[obj] then
+                        topFix.moved[obj] = true
                         warn("clientMid: moved top gui: " .. obj:GetFullName() .. " from y=" .. apY .. " down " .. (topY - apY))
                     end
                 end
@@ -5873,7 +6296,7 @@ local function fixTopGuis()
             end
         end
     end
-    for _, gui in ipairs(screenList) do
+    for _, gui in ipairs(topFix.screens) do
         if gui.Parent then
             visit(gui)
         end
@@ -5881,7 +6304,7 @@ local function fixTopGuis()
 end
 spawn(function()
     while G.clientMidRun == runId do
-        fixTopGuis()
+        topFix.run()
         wait(0.1)
     end
 end)
