@@ -1,6 +1,6 @@
 <div align="center">
 
-[![clientMid](docs/img/logo.png)](https://cm.wiiblox.com)
+[![clientMid](https://raw.githubusercontent.com/clockersman/clientMid/refs/heads/main/Docs/img/logo.png)](https://cm.wiiblox.com)
 
 <hr>
 
