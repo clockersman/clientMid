@@ -1,6 +1,8 @@
 <div align="center">
 
-![clientMid](/docs/img/logo.png)
+<a href="https://cm.wiiblox.com">
+  <img src="/docs/img/logo.png" alt="clientMid">
+</a>
 
 [![Reviewed on ScriptBlox](https://scriptblox.com/badge/Universal-Script-clientMid-241059)](https://scriptblox.com/script/Universal-Script-clientMid-241059) [![GitHub Stars](https://img.shields.io/github/stars/clockersman/clientMid?style=social)](https://github.com/clockersman/clientMid/stargazers)
 
