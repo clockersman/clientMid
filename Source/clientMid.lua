@@ -22,7 +22,7 @@ Version = 0.1.0
 
 local config = {
     Platform = "Desktop",
-    Pre2022Materials = true,
+    Pre2022Materials = false,
     OldAnimations = true,
     OldCamera = false, --beta
 
@@ -41,7 +41,7 @@ local config = {
         --topbar shit
 
         Topbar_Bg_Color = Color3.fromRGB(31, 31, 31),
-        Topbar_Bg_Transparency = 0.5, -- when set to 1, you can click outside the topbar frame (basically yay now i can click buttons that are underneath the topbar!! :D)
+        Topbar_Bg_Transparency = 1, -- when set to 1, you can click outside the topbar frame (basically yay now i can click buttons that are underneath the topbar!! :D)
 
         -- playerlist
         Entry_Pad = 2,
@@ -81,6 +81,7 @@ local config = {
     -- NOTE: they must be quoted strings like "Chat" (not bare Chat), and case matters (PlayerList!)
     -- Available: "Menu", "Chat", "Backpack", "Health", "Name", "PlayerList", "Topbar_Bg"
     TopbarDisabled = {
+        
     },
 
     -- toggle chat in hotkey
@@ -88,6 +89,12 @@ local config = {
         Enabled = true,
         KeyCode = Enum.KeyCode.C,
         OpenKeyCode = Enum.KeyCode.Slash,
+    },
+    
+    -- backpack search
+    BackpackThings = {
+            Enabled = true,
+            Keycode = Enum.KeyCode.Z,    
     },
     
     -- playerlist 
@@ -101,7 +108,7 @@ local config = {
     --HELP! what to do here? use a option bellow :
     -- "Username", "Display"
     
-    UsernameOrDisplay = "Username",
+    UsernameOrDisplay = "Display",
     ShowHealthBar = true,
 
     -- Chat
@@ -6050,7 +6057,8 @@ local function initBackpack()
         searchFrame.Parent = InventoryFrame
 
         local searchBox = NewGui('TextBox', 'TextBox')
-        searchBox.Text = SEARCH_TEXT
+        searchBox.Text = ''
+        searchBox.PlaceholderText = SEARCH_TEXT
         searchBox.ClearTextOnFocus = false
         searchBox.FontSize = Enum.FontSize.Size24
         searchBox.TextXAlignment = Enum.TextXAlignment.Left
@@ -6118,9 +6126,9 @@ local function initBackpack()
         end
 
         local function reset()
-            clearResults()
-            searchBox.Text = SEARCH_TEXT
-        end
+    clearResults()
+    searchBox.Text = ''
+end
 
         local function onChanged(property)
             if property == 'Text' then
@@ -6134,10 +6142,10 @@ local function initBackpack()
         end
 
         local function onFocused()
-            if searchBox.Text == SEARCH_TEXT then
-                searchBox.Text = ''
-            end
-        end
+    if searchBox.Text == SEARCH_TEXT then
+        searchBox.Text = ''
+    end
+end
 
         local function focusLost(enterPressed)
             if enterPressed then
@@ -6148,11 +6156,26 @@ local function initBackpack()
             end
         end
 
-        conn(searchBox.Focused, onFocused)
-        conn(xButton.MouseButton1Click, reset)
-        conn(searchBox:GetPropertyChangedSignal('Text'), onChanged)
-        conn(searchBox.FocusLost, focusLost)
+conn(searchBox.Focused, onFocused)
+conn(xButton.MouseButton1Click, reset)
+conn(searchBox:GetPropertyChangedSignal('Text'), onChanged)
+conn(searchBox.FocusLost, focusLost)
 
+conn(uis.InputBegan, function(input, gameProcessed)
+    if not config.BackpackThings.Enabled then return end
+    if input.KeyCode ~= config.BackpackThings.Keycode then return end
+    if not uis:IsKeyDown(Enum.KeyCode.LeftAlt) then return end
+
+    if InventoryFrame.Visible then
+        searchBox:ReleaseFocus()
+        BP.OpenClose()
+    else
+        BP.OpenClose()
+        task.defer(function()
+            searchBox:CaptureFocus()
+        end)
+    end
+end)
         conn(BP.StateChanged.Event, function(isNowOpen)
             xButton.Modal = isNowOpen -- Allows free mouse movement even in first person
             if not isNowOpen then
@@ -6179,7 +6202,7 @@ local function initBackpack()
         conn(uis.InputChanged, detectGamepad)
     end
 
-    do -- Make the Inventory expand/collapse arrow (unless TopBar)
+    do
         local arrowFrame, arrowIcon = nil, nil
         local collapsed, closed, opened = nil, nil, nil
 
