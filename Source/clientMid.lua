@@ -22,6 +22,9 @@ Version = 0.1.0
 
 local config = {
     Platform = "Desktop",
+    
+    -- opt
+        
     Pre2022Materials = false,
     OldAnimations = true,
     OldCamera = false, --beta
@@ -87,7 +90,7 @@ local config = {
     -- toggle chat in hotkey
     ChatToggle = {
         Enabled = true,
-        KeyCode = Enum.KeyCode.C,
+        KeyCode = Enum.KeyCode.X,
         OpenKeyCode = Enum.KeyCode.Slash,
     },
     
@@ -191,7 +194,7 @@ local config = {
         Friend_Icon = "rbxasset://textures/ui/icon_friends_16.png",
         Friend_Request_Icon = "rbxasset://textures/ui/icon_friendrequestsent_16.png",
         Friend_Received_Icon = "rbxasset://textures/ui/icon_friendrequestrecieved-16.png",
-        Icon_Admin = "rbxasset://textures/ui/icon_admin-16.png",
+        Icon_Admin = "rbxassetid://93206064526439",-- for normal admin icon : rbxasset://textures/ui/icon_admin-16.png
 
         -- chat
         Chat_TeamButton = "rbxasset://textures/ui/chat_teamButton.png",
@@ -1764,6 +1767,7 @@ conn(nhc.MouseButton1Click, function() tog() end)
 
 conn(uis.InputBegan, function(inp)
     if inp.KeyCode ~= Enum.KeyCode.Tab then return end
+    if G.clientMid and G.clientMid.HubOpen then return end
     if uis:GetFocusedTextBox() then return end
     tog()
 end)
@@ -2301,13 +2305,33 @@ switchpage = function(pg)
 end
 
 
-local originalTopbarTransparency = topbarbg.BackgroundTransparency
-local originalTopbarActive = topbarbg.Active
+G.clientMid = G.clientMid or {}
+G.clientMid.TopbarTransparency = topbarbg.BackgroundTransparency
+G.clientMid.TopbarActive = topbarbg.Active
 
 local function sethubvis(v)
     hubopen = v
+    G.clientMid.HubOpen = v
 
     if v then
+        -- Actually close Chat and Backpack (not just hide them behind the shield).
+        local chat = G.clientMid.Chat
+        if chat and type(chat.close) == "function" then
+            pcall(chat.close)
+        end
+
+        local bp = G.clientMid.Backpack
+        if bp and bp.IsOpen and type(bp.OpenClose) == "function" then
+            -- Backpack normally auto-closes the hub when it closes. Suppress that
+            -- while opening the hub, otherwise it would immediately close again.
+            local wasHubOpen = hubopen
+            hubopen = false
+            G.clientMid.HubOpen = false
+            pcall(bp.OpenClose)
+            hubopen = wasHubOpen
+            G.clientMid.HubOpen = wasHubOpen
+        end
+
         shield.Visible = true
 
         shield:TweenPosition(
@@ -2337,6 +2361,9 @@ local function sethubvis(v)
 
     else
         menustack = {}
+        if G.clientMid.SelectHubButton then
+            G.clientMid.SelectHubButton(nil)
+        end
 
         shield:TweenPosition(
             UDim2.new(0, 0, -1, -36),
@@ -2348,8 +2375,8 @@ local function sethubvis(v)
                 if not hubopen then
                     shield.Visible = false
 
-                    topbarbg.BackgroundTransparency = originalTopbarTransparency
-                    topbarbg.Active = originalTopbarActive
+                    topbarbg.BackgroundTransparency = G.clientMid.TopbarTransparency
+                    topbarbg.Active = G.clientMid.TopbarActive
                 end
             end
         )
@@ -2369,12 +2396,188 @@ end
 
 
 local function togglesettings()
-    sethubvis(not hubopen)
+    if hubopen then
+        sethubvis(false)
+        pcall(function() GuiService:SetMenuIsOpen(false) end)
+    else
+        sethubvis(true)
+    end
 end
 conn(hamb.MouseButton1Click, function() togglesettings() end)
-conn(uis.InputBegan, function(inp, gpe)
-    if gpe then return end
-    if inp.KeyCode == Enum.KeyCode.Escape and hubopen then popmenu() end
+
+pcall(function()
+    ------------------------------------------------------------------
+    -- Native SettingsHub bridge (hardcoded CoreGui path)
+    ------------------------------------------------------------------
+    local RobloxGui = CoreGui:WaitForChild("RobloxGui")
+    local ClippingShield = RobloxGui:WaitForChild("SettingsClippingShield")
+    local SettingsShield = ClippingShield:WaitForChild("SettingsShield")
+
+    ------------------------------------------------------------------
+    -- Hub keyboard actions (shared by events and the held-key loop)
+    ------------------------------------------------------------------
+    local function cyclePage(dir)
+        if not curpage or curpage.NoCycle then return end
+
+        local list = {}
+        for _, p in ipairs(pages) do
+            if not p.NoCycle then
+                list[#list + 1] = p
+            end
+        end
+        if #list < 2 then return end
+
+        local idx
+        for i, p in ipairs(list) do
+            if p == curpage then idx = i break end
+        end
+        if not idx then return end
+
+        idx = ((idx - 1 + dir) % #list) + 1
+        switchpage(list[idx])
+    end
+
+    local function scrollPage(amount)
+        local maxY = pv.CanvasSize.Y.Offset - pv.AbsoluteSize.Y
+        if maxY < 0 then maxY = 0 end
+        local y = pv.CanvasPosition.Y + amount
+        if y < 0 then y = 0 elseif y > maxY then y = maxY end
+        pv.CanvasPosition = Vector2.new(pv.CanvasPosition.X, y)
+    end
+
+    local function handleHubKey(keyCode)
+        if not hubopen or uis:GetFocusedTextBox() then return false end
+
+        -- Both the event path and the held-key loop can see the same press.
+        local now = os.clock()
+        if G.clientMid.HubKeyCode == keyCode and now - (G.clientMid.HubKeyTime or 0) < 0.08 then
+            return true
+        end
+
+        local handled = true
+        if keyCode == Enum.KeyCode.R then
+            if type(G.clientMid.OpenResetPrompt) == "function" then
+                G.clientMid.OpenResetPrompt()
+            end
+        elseif keyCode == Enum.KeyCode.L then
+            if type(G.clientMid.OpenLeavePrompt) == "function" then
+                G.clientMid.OpenLeavePrompt()
+            end
+        elseif keyCode == Enum.KeyCode.Return then
+            local b = G.clientMid.HubSelectedButton
+            local actions = G.clientMid.HubButtonActions
+            local fn = b and actions and actions[b]
+            if b and b:GetAttribute("HubPrompt") and type(fn) == "function" then
+                fn()
+            end
+        elseif keyCode == Enum.KeyCode.Tab or keyCode == Enum.KeyCode.Right then
+            local back = keyCode == Enum.KeyCode.Tab
+                and (uis:IsKeyDown(Enum.KeyCode.LeftShift) or uis:IsKeyDown(Enum.KeyCode.RightShift))
+            cyclePage(back and -1 or 1)
+        elseif keyCode == Enum.KeyCode.Left then
+            cyclePage(-1)
+        elseif keyCode == Enum.KeyCode.Down then
+            scrollPage(60)
+        elseif keyCode == Enum.KeyCode.Up then
+            scrollPage(-60)
+        else
+            handled = false
+        end
+
+        if handled then
+            G.clientMid.HubKeyCode = keyCode
+            G.clientMid.HubKeyTime = now
+        end
+        return handled
+    end
+
+    game:GetService("ContextActionService"):BindActionAtPriority("ClientMidHubKeys", function(_, state, input)
+        if state ~= Enum.UserInputState.Begin or not hubopen then
+            return Enum.ContextActionResult.Pass
+        end
+        if handleHubKey(input.KeyCode) then
+            return Enum.ContextActionResult.Sink
+        end
+        return Enum.ContextActionResult.Pass
+    end, false, 3000,
+        Enum.KeyCode.R,
+        Enum.KeyCode.L,
+        Enum.KeyCode.Return,
+        Enum.KeyCode.Tab,
+        Enum.KeyCode.Left,
+        Enum.KeyCode.Right,
+        Enum.KeyCode.Up,
+        Enum.KeyCode.Down)
+
+    local watchedKeys = {
+        Enum.KeyCode.R,
+        Enum.KeyCode.L,
+        Enum.KeyCode.Return,
+        Enum.KeyCode.Tab,
+        Enum.KeyCode.Left,
+        Enum.KeyCode.Right,
+        Enum.KeyCode.Up,
+        Enum.KeyCode.Down,
+    }
+    local prevDown = {}
+
+    -- Open/close the ClientMid hub from the native SettingsShield state.
+    conn(SettingsShield:GetPropertyChangedSignal("Visible"), function()
+        sethubvis(SettingsShield.Visible)
+    end)
+
+    if SettingsShield.Visible and not hubopen then
+        sethubvis(true)
+    end
+
+    -- Force 0x0 clipping box off-screen + allow walking while menu is open
+    conn(RunService.RenderStepped, function()
+        ClippingShield.ClipsDescendants = true
+        ClippingShield.Size = UDim2.new(0, 0, 0, 0)
+        ClippingShield.Position = UDim2.new(-5, 0, -5, 0)
+        ClippingShield.Active = false
+
+        local focused = uis:GetFocusedTextBox()
+        for _, keyCode in ipairs(watchedKeys) do
+            local down = uis:IsKeyDown(keyCode)
+            if down and not prevDown[keyCode] and not focused then
+                handleHubKey(keyCode)
+            end
+            prevDown[keyCode] = down
+        end
+
+        if SettingsShield.Visible then
+            -- Prevent WASD / Arrow keys from navigating hidden UI elements
+            GuiService.SelectedObject = nil
+            GuiService.SelectedCoreObject = nil
+
+            -- Drive Humanoid movement directly from camera-relative WASD + Space
+            local char = Player.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local cam = workspace.CurrentCamera
+
+            if hum and cam and not focused then
+                local forward = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+                local right = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
+                local move = Vector3.new(0, 0, 0)
+
+                if uis:IsKeyDown(Enum.KeyCode.W) then move = move + forward end
+                if uis:IsKeyDown(Enum.KeyCode.S) then move = move - forward end
+                if uis:IsKeyDown(Enum.KeyCode.D) then move = move + right end
+                if uis:IsKeyDown(Enum.KeyCode.A) then move = move - right end
+
+                if move.Magnitude > 0 then
+                    hum:Move(move.Unit, false)
+                else
+                    hum:Move(Vector3.new(0, 0, 0), false)
+                end
+
+                if uis:IsKeyDown(Enum.KeyCode.Space) then
+                    hum.Jump = true
+                end
+            end
+        end
+    end)
 end)
 
 G.clientMid = G.clientMid or {}
@@ -2420,6 +2623,7 @@ local function mkbtn2(parent, name, text, pos, size, fn)
     b.Position = pos
     b.Size = size
     b.ZIndex = 2
+    b:SetAttribute("HubSelected", false)
     b.Parent = parent
     local t = Instance.new("TextLabel")
     t.Name = name .. "TextLabel"
@@ -2443,11 +2647,31 @@ local function mkbtn2(parent, name, text, pos, size, fn)
     end)
     conn(b.InputEnded, function(inp)
         if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then
-            b.Image = config.Assets.Menu_Button
+            if b:GetAttribute("HubSelected") then
+                b.Image = config.Assets.Menu_Button_Selected
+            else
+                b.Image = config.Assets.Menu_Button
+            end
         end
     end)
     conn(b.MouseButton1Click, fn)
+    G.clientMid.HubButtonActions = G.clientMid.HubButtonActions or {}
+    G.clientMid.HubButtonActions[b] = fn
     return b
+end
+
+G.clientMid.SelectHubButton = function(btn)
+    local prev = G.clientMid.HubSelectedButton
+    if prev and prev ~= btn then
+        prev:SetAttribute("HubSelected", false)
+        prev.Image = config.Assets.Menu_Button
+    end
+
+    G.clientMid.HubSelectedButton = btn
+    if btn then
+        btn:SetAttribute("HubSelected", true)
+        btn.Image = config.Assets.Menu_Button_Selected
+    end
 end
 
 local function mklab(parent, name, text, pos, size, bold)
@@ -3156,19 +3380,48 @@ local resetpg = addpage("Reset", nil, function(page)
     t.TextWrapped = true
     t.ZIndex = 2
     t.Parent = page
-    mkbtn2(t, "ResetCharacter", "Reset", UDim2.new(0.5, -220, 1, -30), UDim2.new(0, 200, 0, 50), function()
+    local resetConfirm = mkbtn2(t, "ResetCharacter", "Reset", UDim2.new(0.5, -220, 1, -30), UDim2.new(0, 200, 0, 50), function()
         local ch = Player.Character
         local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-        if hum then hum.Health = 0 end
+        G.clientMid.ResetReturnPage = G.clientMid.ResetReturnPage or menustack[#menustack] or pages[1]
+        G.clientMid.ReopenHubAfterReset = hum ~= nil
         sethubvis(false)
+        if hum then
+            hum.Health = 0
+            pcall(function() hum:TakeDamage(hum.MaxHealth) end)
+        end
+        if ch then pcall(function() ch:BreakJoints() end) end
+
+        -- Fallback: if CharacterAdded never fires for this game's respawn flow,
+        -- still bring the hub back automatically.
+        task.delay(8, function()
+            if G.clientMidRun ~= runId then return end
+            if G.clientMid.FinishResetReturn then
+                G.clientMid.FinishResetReturn()
+            end
+        end)
     end)
+    resetConfirm:SetAttribute("HubPrompt", true)
+    G.clientMid.ResetConfirmButton = resetConfirm
     mkbtn2(t, "DontResetCharacter", "Don't Reset", UDim2.new(0.5, 20, 1, -30), UDim2.new(0, 200, 0, 50), function()
-        popmenu()
+        G.clientMid.ReturnToHubFromPrompt(resetpg)
     end)
     return 280
 end, nil, true)
 resetpg.HideChrome = true
+resetpg.NoCycle = true
+G.clientMid.ResetPromptPage = resetpg
 removeheader(resetpg.TabHeader)
+conn(resetpg.Displayed.Event, function()
+    if curpage == resetpg then
+        G.clientMid.SelectHubButton(G.clientMid.ResetConfirmButton)
+    end
+end)
+conn(resetpg.Hidden.Event, function()
+    if G.clientMid.HubSelectedButton == G.clientMid.ResetConfirmButton then
+        G.clientMid.SelectHubButton(nil)
+    end
+end)
 
 local leavepg = addpage("Leave", nil, function(page)
     page.Name = "LeaveGamePage"
@@ -3183,16 +3436,103 @@ local leavepg = addpage("Leave", nil, function(page)
     t.TextWrapped = true
     t.ZIndex = 2
     t.Parent = page
-    mkbtn2(t, "LeaveGame", "Leave", UDim2.new(0.5, -220, 1, -30), UDim2.new(0, 200, 0, 50), function()
+    local leaveConfirm = mkbtn2(t, "LeaveGame", "Leave", UDim2.new(0.5, -220, 1, -30), UDim2.new(0, 200, 0, 50), function()
+        G.clientMid.LeaveReturnPage = G.clientMid.LeaveReturnPage or menustack[#menustack] or pages[1]
+        sethubvis(false)
+
         pcall(function() game:Shutdown() end)
+        pcall(function() Player:Kick("Left the game") end)
+
+        -- If leaving did not actually disconnect us, return to the hub just
+        -- like Reset does after the action finishes.
+        task.delay(2, function()
+            if G.clientMidRun ~= runId then return end
+            if not Player.Parent then return end
+            G.clientMid.FinishLeaveReturn()
+        end)
     end)
+    leaveConfirm:SetAttribute("HubPrompt", true)
+    G.clientMid.LeaveConfirmButton = leaveConfirm
     mkbtn2(t, "DontLeaveGame", "Don't Leave", UDim2.new(0.5, 20, 1, -30), UDim2.new(0, 200, 0, 50), function()
-        popmenu()
+        G.clientMid.ReturnToHubFromPrompt(leavepg)
     end)
     return 280
 end, nil, true)
 leavepg.HideChrome = true
+leavepg.NoCycle = true
+G.clientMid.LeavePromptPage = leavepg
 removeheader(leavepg.TabHeader)
+conn(leavepg.Displayed.Event, function()
+    if curpage == leavepg then
+        G.clientMid.SelectHubButton(G.clientMid.LeaveConfirmButton)
+    end
+end)
+conn(leavepg.Hidden.Event, function()
+    if G.clientMid.HubSelectedButton == G.clientMid.LeaveConfirmButton then
+        G.clientMid.SelectHubButton(nil)
+    end
+end)
+
+G.clientMid.FinishResetReturn = function()
+    if not G.clientMid.ReopenHubAfterReset then return end
+    if G.clientMidRun ~= runId then return end
+
+    G.clientMid.ReopenHubAfterReset = false
+    local pg = G.clientMid.ResetReturnPage
+    G.clientMid.ResetReturnPage = nil
+
+    if not hubopen then
+        sethubvis(true)
+    end
+    if curpage == resetpg and pg and pg.Page then
+        switchpage(pg)
+    end
+end
+
+conn(Player.CharacterAdded, function()
+    if not G.clientMid.ReopenHubAfterReset then return end
+    task.wait(0.5)
+    if G.clientMidRun ~= runId then return end
+    G.clientMid.FinishResetReturn()
+end)
+
+G.clientMid.FinishLeaveReturn = function()
+    if G.clientMidRun ~= runId then return end
+    local pg = G.clientMid.LeaveReturnPage
+    G.clientMid.LeaveReturnPage = nil
+
+    if not hubopen then
+        sethubvis(true)
+    end
+    if curpage == leavepg and pg and pg.Page then
+        switchpage(pg)
+    end
+end
+
+G.clientMid.ReturnToHubFromPrompt = function(promptpg)
+    if G.clientMidRun ~= runId then return end
+
+    local pg
+    if promptpg == resetpg then
+        pg = G.clientMid.ResetReturnPage
+        G.clientMid.ResetReturnPage = nil
+    elseif promptpg == leavepg then
+        pg = G.clientMid.LeaveReturnPage
+        G.clientMid.LeaveReturnPage = nil
+    end
+
+    if not pg or pg == promptpg or not pg.Page then
+        pg = pages[1]
+    end
+
+    menustack = {}
+    if not hubopen then
+        sethubvis(true)
+    end
+    if pg and pg.Page and curpage ~= pg then
+        switchpage(pg)
+    end
+end
 
 local vol = 5
 pcall(function() vol = math.floor(UserSettings():GetService("UserGameSettings").MasterVolume * 10 + 0.5) end)
@@ -3238,8 +3578,8 @@ addpage("Help", config.Assets.HelpTab_Icon, function(page)
         {"Chat", "/"},
         {"Menu", "Esc"},
         {"Player list", "Tab"},
-        {"Reset character", "Esc > Reset"},
-        {"Leave game", "Esc > Leave"},
+        {"Reset character", "R (in menu)"},
+        {"Leave game", "L (in menu)"},
     }
     local y = 40
     for _, k in ipairs(keys) do
@@ -3293,6 +3633,30 @@ popmenu = function()
     end
 end
 
+G.clientMid.OpenResetPrompt = function()
+    if curpage == resetpg then return end
+    if curpage and curpage.NoCycle then return end
+
+    G.clientMid.ResetReturnPage = curpage or pages[1]
+    if not hubopen then
+        sethubvis(true)
+    end
+    menustack = {}
+    switchpage(resetpg)
+end
+
+G.clientMid.OpenLeavePrompt = function()
+    if curpage == leavepg then return end
+    if curpage and curpage.NoCycle then return end
+
+    G.clientMid.LeaveReturnPage = curpage or pages[1]
+    if not hubopen then
+        sethubvis(true)
+    end
+    menustack = {}
+    switchpage(leavepg)
+end
+
 local function botbtn(name, text, icon, fn)
     local b = mkbtn2(botbar, name, text, UDim2.new(0, 0, 0, 0), UDim2.new(0, 260, 0, 70), fn)
     if icon then
@@ -3309,12 +3673,10 @@ local function botbtn(name, text, icon, fn)
 end
 
 botbtn("LeaveGameButton", "Leave Game", config.Assets.Leave_Icon, function()
-    pushmenu()
-    switchpage(leavepg)
+    G.clientMid.OpenLeavePrompt()
 end)
 botbtn("ResetCharacterButton", "Reset Character", config.Assets.Reset_Icon, function()
-    pushmenu()
-    switchpage(resetpg)
+    G.clientMid.OpenResetPrompt()
 end)
 botbtn("ResumeButton", "Resume Game", config.Assets.Resume_Icon, function()
     menustack = {}
@@ -4880,6 +5242,9 @@ end
 
     if G.clientMid and G.clientMid.Chat then
         G.clientMid.Chat.focus = focusChat
+        G.clientMid.Chat.close = function()
+            setChatOpen(false)
+        end
         G.clientMid.Chat.toggle = function()
             setChatOpen(not chatVisible)
         end
