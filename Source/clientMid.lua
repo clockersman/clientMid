@@ -44,7 +44,7 @@ local config = {
         --topbar shit
 
         Topbar_Bg_Color = Color3.fromRGB(31, 31, 31),
-        Topbar_Bg_Transparency = 1, -- when set to 1, you can click outside the topbar frame (basically yay now i can click buttons that are underneath the topbar!! :D)
+        Topbar_Bg_Transparency = 0.5, -- when set to 1, you can click outside the topbar frame (basically yay now i can click buttons that are underneath the topbar!! :D)
 
         -- playerlist
         Entry_Pad = 2,
@@ -84,7 +84,6 @@ local config = {
     -- NOTE: they must be quoted strings like "Chat" (not bare Chat), and case matters (PlayerList!)
     -- Available: "Menu", "Chat", "Backpack", "Health", "Name", "PlayerList", "Topbar_Bg"
     TopbarDisabled = {
-        
     },
 
     -- toggle chat in hotkey
@@ -483,7 +482,7 @@ conn(CoreGui.ChildAdded, function(child)
     if delnames[child.Name] then delcore(child) end
 end)
 pcall(function()
-    game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+    game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, not dis("Backpack"))
 end)
 
 -- folders
@@ -567,6 +566,14 @@ local function dis(name)
         end
     end
     if autoCore and autoCore[name] then
+        return true
+    end
+    local rd = G.clientMid and G.clientMid.ComponentDisabled
+    if rd and rd[name] then
+        return true
+    end
+    -- Normalize TopbarBg/Topbar_Bg naming
+    if name == "Topbar_Bg" and rd and rd.TopbarBg then
         return true
     end
     return false
@@ -874,23 +881,28 @@ local BLOCKED_ICON = config.Assets.PlayerList_BlockedIcon
 local FRIEND_ICON = config.Assets.Friend_Icon
 local FRIEND_REQUEST_ICON = config.Assets.Friend_Request_Icon
 local FRIEND_RECEIVED_ICON = config.Assets.Friend_Received_Icon
-local ADMIN_USERS = {
-    "clientMid",
-    "clientMidSounds",
-}
+do
+    local ADMIN_USERS = {
+        "clientMid",
+        "clientMidSounds",
+    }
 
-local function isAdmin(player)
-    if player:IsInGroup(ADMIN_GROUP) then
-        return true
-    end
-
-    for _, username in ipairs(ADMIN_USERS) do
-        if player.Name:lower() == username:lower() then
+    local function isAdmin(player)
+        if player:IsInGroup(ADMIN_GROUP) then
             return true
         end
+
+        for _, username in ipairs(ADMIN_USERS) do
+            if player.Name:lower() == username:lower() then
+                return true
+            end
+        end
+
+        return false
     end
 
-    return false
+    G.clientMid = G.clientMid or {}
+    G.clientMid.isAdmin = isAdmin
 end
 
 local function getplname(plr)
@@ -1437,7 +1449,7 @@ local function createPlayerEntry(player)
         end
     end
 
-    if isAdmin(player) then
+    if G.clientMid and G.clientMid.isAdmin and G.clientMid.isAdmin(player) then
         if not membershipIcon then
             membershipIcon = createImageIcon(config.Assets.Icon_Admin, "MembershipIcon", 1, entryFrame)
         else
@@ -2102,6 +2114,63 @@ end)
 
 layoutTopbarIcons()
 
+-- Component references exposed to plugins (UI only).
+G.clientMid.Components = {
+    Menu = hamb,
+    Chat = chatIconButton,
+    Backpack = backpackIconButton,
+    PlayerList = Container,
+    Health = hc,
+    Name = nm,
+    TopbarBg = topbarbg,
+}
+
+-- Let plugins show/hide topbar components live (UI only).
+G.clientMid.SetComponentVisible = function(component, visible)
+    G.clientMid.ComponentDisabled = G.clientMid.ComponentDisabled or {}
+    G.clientMid.ComponentDisabled[component] = not visible
+    if component == "TopbarBg" then
+        G.clientMid.ComponentDisabled["Topbar_Bg"] = not visible
+    end
+
+    local c = G.clientMid.Components and G.clientMid.Components[component]
+    if c then
+        if component == "TopbarBg" then
+            -- Hide only the topbar background, not the whole topbar frame/children.
+            c.BackgroundTransparency = visible and config.TopbarConstants.Topbar_Bg_Transparency or 1
+            c.Active = visible and config.TopbarConstants.Topbar_Bg_Transparency < 1 or false
+        else
+            local hubOpen = G.clientMid and G.clientMid.HubOpen
+            if component == "PlayerList" and hubOpen and visible then
+                -- Keep hidden while hub is open; hub close will restore based on dis().
+            else
+                c.Visible = visible
+            end
+            if component == "PlayerList" and not visible then
+                pcall(hidepop)
+            end
+        end
+    end
+    -- Also toggle the native CoreGui backpack so disabling the profile
+    -- actually hides the real backpack, not just the clientMid icon.
+    if component == "Backpack" then
+        pcall(function()
+            game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, visible)
+        end)
+        local bp = G.clientMid and G.clientMid.Backpack
+        if bp then
+            if not visible then
+                if bp.IsOpen and type(bp.OpenClose) == "function" then
+                    pcall(bp.OpenClose)
+                end
+                if bp.MainFrame then pcall(function() bp.MainFrame.Visible = false end) end
+            else
+                if bp.MainFrame then pcall(function() bp.MainFrame.Visible = true end) end
+            end
+        end
+    end
+end
+
 local pages = {}
 local tabheaders = {}
 local curpage = nil
@@ -2250,9 +2319,30 @@ local function addpage(name, icon, build, tab)
         if tab.iw then pg.Icon.Size = UDim2.new(0, tab.iw, 0, tab.ih or tab.iw) end
         if tab.ix then pg.Icon.Position = UDim2.new(0, tab.ix, 0.5, tab.iy or -18) end
     end
-    pages[#pages + 1] = pg
-    addheader(pg.TabHeader, pg)
-    pg.Page.Position = UDim2.new(pg.TabPosition - 1, 0, 0, 0)
+
+    local insertAt = tab and tonumber(tab.index)
+    if insertAt and insertAt >= 1 and insertAt <= #tabheaders + 1 then
+        insertAt = math.floor(insertAt)
+        table.insert(tabheaders, insertAt, pg.TabHeader)
+        pages[#pages + 1] = pg
+        -- Rebuild TabPosition for all pages based on header order
+        for i, h in ipairs(tabheaders) do
+            for _, p in ipairs(pages) do
+                if p.TabHeader == h then
+                    p.TabPosition = i
+                    p.Page.Position = UDim2.new(p.TabPosition - (currentPage and currentPage.TabPosition or 1), 0, 0, 0)
+                end
+            end
+        end
+        setzindex(pg.TabHeader, 3)
+        pg.TabHeader.Parent = hubbar
+        resizeHubBar()
+    else
+        pages[#pages + 1] = pg
+        addheader(pg.TabHeader, pg)
+        pg.Page.Position = UDim2.new(pg.TabPosition - 1, 0, 0, 0)
+    end
+
     if build then
         local ok, h = pcall(build, pg.Page)
         if ok and type(h) == "number" then
@@ -3022,9 +3112,12 @@ local function buildplugins(page)
         return t
     end
 
-    local function plugcard(parent, path, isplug, y)
+    local function plugcard(parent, path, isplug, islua, isdir, y)
         local nm = string.match(path, "([^/]+)$") or path
-        local key = isplug and string.sub(nm, 1, -8) or string.match(nm, "(.+)%.lua$")
+        local key
+        if isplug then key = string.sub(nm, 1, -8)
+        elseif islua then key = string.match(nm, "(.+)%.lua$")
+        else key = nm end
         local t = isplug and readmeta(path) or nil
         local meta = t and t.meta or nil
         local isdisabled = disabledplugs[key]
@@ -3078,12 +3171,13 @@ local function buildplugins(page)
         dl.Position = UDim2.new(0, 68, 0, 32)
         dl.Size = UDim2.new(1, -390, 0, 22)
         dl.ZIndex = 3
-        dl.Text = meta and table.concat({tostring(meta.version or ""), tostring(meta.author or ""), tostring(meta.desc or "")}, "  ") or "raw lua file"
+        dl.Text = meta and table.concat({tostring(meta.version or ""), tostring(meta.author or ""), tostring(meta.desc or "")}, "  ") or (isdir and "folder plugin" or "raw lua file")
         dl.Parent = card
 
         local function doUninstall()
-            pcall(function() delfile(path) end)
-            if isplug then pcall(function() delfolder(plugdir .. "/" .. key) end) end
+            if isplug then pcall(function() delfile(path) end) end
+            if isdir then pcall(function() delfolder(path) end) end
+            if islua then pcall(function() delfile(path) end) end
             loadedplugs[key] = nil
             openplugs[key] = nil
             status("uninstalled: " .. key)
@@ -3105,7 +3199,22 @@ local function buildplugins(page)
         mkbtn2(card, "Disable_" .. nm, isdisabled and "Enable" or "Disable", UDim2.new(1, -206, 0, 15), UDim2.new(0, 96, 0, 34), function()
             disabledplugs[key] = not disabledplugs[key]
             tmpSet("plugdis_" .. key, disabledplugs[key] and "1" or "0")
-            if not disabledplugs[key] and not loadedplugs[key] and t then pcall(plugload, t) end
+            if not disabledplugs[key] and not loadedplugs[key] then
+                if isplug and t then pcall(plugload, t)
+                elseif islua then pcall(plugloadraw, path)
+                elseif isdir then
+                    local entry = path .. "/main.lua"
+                    if not isfile(entry) then entry = path .. "/init.lua" end
+                    if isfile(entry) then
+                        local fn, err = loadfile(entry)
+                        if fn then
+                            local ok2, r2 = pcall(fn)
+                            if ok2 then loadedplugs[key] = true
+                            else warn("clientMid: plugin load failed '"..key.."': "..tostring(r2)) end
+                        end
+                    end
+                end
+            end
             status(disabledplugs[key] and ("disabled: " .. key) or ("enabled: " .. key))
             renderrows()
         end)
@@ -3187,13 +3296,31 @@ local function buildplugins(page)
             return
         end
         local n = 0
+        -- Deduplicate by base name so a plugin isn't shown as both a .cmplug
+        -- and its installed folder (prefer the folder when both exist).
+        local best = {}
         for _, path in ipairs(files) do
             local isplug = string.sub(path, -7) == ".cmplug"
             local islua = string.sub(path, -4) == ".lua"
-            if isplug or islua then
-                y = plugcard(content, path, isplug, y) + 10
-                n = n + 1
+            local isdir = type(isfolder) == "function" and isfolder(path) or false
+            if isplug or islua or isdir then
+                local nm2 = string.match(path, "([^/]+)$") or path
+                local base
+                if isplug then base = string.sub(nm2, 1, -8)
+                elseif islua then base = string.match(nm2, "(.+)%.lua$") or nm2
+                else base = nm2 end
+                if base then
+                    local cur = best[base]
+                    local rank = isdir and 3 or (isplug and 2 or 1)
+                    if not cur or rank > cur.rank then
+                        best[base] = {path = path, isplug = isplug, islua = islua, isdir = isdir, rank = rank}
+                    end
+                end
             end
+        end
+        for _, entry in pairs(best) do
+            y = plugcard(content, entry.path, entry.isplug, entry.islua, entry.isdir, y) + 10
+            n = n + 1
         end
         if statusmsg == "" then
             if n == 0 then
@@ -3720,14 +3847,43 @@ if fsok then
     pcall(function()
         for _, path in ipairs(listfiles(plugdir)) do
             if string.sub(path, -7) == ".cmplug" then
+                local nm2 = string.match(path, "([^/]+)$") or path
+                local base2 = string.sub(nm2, 1, -8)
+                -- If the plugin is already installed as a folder, don't also load
+                -- from the .cmplug file (avoids loading the same plugin twice).
+                local folderInstalled = type(isfolder) == "function" and isfolder(plugdir .. "/" .. base2) or false
                 local ok, body = pcall(function() return readfile(path) end)
-                if ok then
+                if ok and not folderInstalled then
                     local t = plugdec(body)
                     if t and not disabledplugs[t.meta.name] then pcall(plugload, t) end
                 end
             elseif string.sub(path, -4) == ".lua" then
                 local key = string.match(path, "([^/]+)%.lua$")
                 if key and not disabledplugs[key] then pcall(plugloadraw, path) end
+            elseif type(isfolder) == "function" and isfolder(path) then
+                local clean = path:gsub("/+$", "")
+                local base = string.match(clean, "([^/]+)$") or clean
+                if base and not disabledplugs[base] then
+                    warn("clientMid: found plugin folder: " .. base)
+                    local entry = clean .. "/main.lua"
+                    if not isfile(entry) then entry = clean .. "/init.lua" end
+                    if isfile(entry) then
+                        local fn, err = loadfile(entry)
+                        if fn then
+                            local ok2, r2 = pcall(fn)
+                            if ok2 then
+                                loadedplugs[base] = true
+                                warn("clientMid: loaded folder plugin: " .. base)
+                            else
+                                warn("clientMid: plugin load failed '"..base.."': "..tostring(r2))
+                            end
+                        else
+                            warn("clientMid: plugin load failed '"..base.."': "..tostring(err))
+                        end
+                    else
+                        warn("clientMid: folder plugin " .. base .. " has no main.lua/init.lua")
+                    end
+                end
             end
         end
     end)
@@ -6064,7 +6220,8 @@ local function initBackpack()
 
     local function OnInputBegan(input, isProcessed)
         -- Pass through keyboard hotkeys when not typing into a TextBox and not disabled (except for the Drop key)
-        if input.UserInputType == Enum.UserInputType.Keyboard and not TextBoxFocused and (WholeThingEnabled or input.KeyCode.Value == DROP_HOTKEY_VALUE) then
+        local backpackCompDisabled = G.clientMid and G.clientMid.Components and G.clientMid.Components.Backpack and G.clientMid.Components.Backpack.Visible == false
+        if input.UserInputType == Enum.UserInputType.Keyboard and not TextBoxFocused and (WholeThingEnabled or input.KeyCode.Value == DROP_HOTKEY_VALUE) and not backpackCompDisabled then
             local hotkeyBehavior = HotkeyFns[input.KeyCode.Value]
             if hotkeyBehavior then
                 hotkeyBehavior(isProcessed)
@@ -6616,8 +6773,18 @@ end)
         end
 
         local function openClose()
+            local backpackDisabled = false
+            do
+                local c = G.clientMid and G.clientMid.Components and G.clientMid.Components.Backpack
+                if c and c.Visible == false then backpackDisabled = true end
+            end
+            if backpackDisabled and not InventoryFrame.Visible then
+                return
+            end
             if not next(Dragging) then -- Only continue if nothing is being dragged
-                InventoryFrame.Visible = not InventoryFrame.Visible
+                local targetOpen = not InventoryFrame.Visible
+                if backpackDisabled then targetOpen = false end
+                InventoryFrame.Visible = targetOpen
                 local nowOpen = InventoryFrame.Visible
                 if arrowIcon then
                     arrowIcon.Image = (nowOpen) and ARROW_IMAGE_CLOSE or ARROW_IMAGE_OPEN
@@ -6715,6 +6882,9 @@ end)
 
     -- Show the backpack (clientMid's topbar icon handles open/close)
     WholeThingEnabled = true
+    BP.MainFrame = MainFrame
+    BP.InventoryFrame = InventoryFrame
+    BP.HotbarFrame = HotbarFrame
     MainFrame.Visible = true
 end
 initBackpack()
