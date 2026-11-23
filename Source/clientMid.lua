@@ -1423,7 +1423,7 @@ local function createPlayerEntry(player)
     else
         membershipIcon.Image = config.Assets.Icon_Admin
     end
-end
+end)
 
     local playerName = createEntryNameText("PlayerName", getplname(player), entryFrame.Size.X.Offset - currentXOffset, currentXOffset)
     playerName.Parent = entryFrame
