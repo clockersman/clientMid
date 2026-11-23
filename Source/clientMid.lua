@@ -20,6 +20,24 @@ Version = 0.1.0
 
 -- config
 
+-- external config (from getgenv or loadstring varargs) --
+local __extCfg = nil
+do
+    local __vararg = {...}
+    local function _grab()
+        if type(__vararg[1]) == "table" then return __vararg[1] end
+        local g = (type(getgenv) == "function" and getgenv()) or _G
+        if type(g) == "table" then
+            for _, key in ipairs({"ClientMidConfig", "clientMidConfig", "clientMid_config", "Config", "config"}) do
+                if type(g[key]) == "table" then return g[key] end
+            end
+        end
+        return nil
+    end
+    __extCfg = _grab()
+end
+
+
 local config = {
     Platform = "Desktop",
     
@@ -44,7 +62,7 @@ local config = {
         --topbar shit
 
         Topbar_Bg_Color = Color3.fromRGB(31, 31, 31),
-        Topbar_Bg_Transparency = 0.5, -- when set to 1, you can click outside the topbar frame (basically yay now i can click buttons that are underneath the topbar!! :D)
+        Topbar_Bg_Transparency = 1, -- when set to 1, you can click outside the topbar frame (basically yay now i can click buttons that are underneath the topbar!! :D)
 
         -- playerlist
         Entry_Pad = 2,
@@ -202,6 +220,20 @@ local config = {
         Scroll_Top_Image = "rbxasset://textures/ui/scroll-top.png",
     }
 }
+
+-- merge external config over defaults (deep merge) --
+if type(__extCfg) == "table" then
+    local function _merge(dst, src)
+        for k, v in pairs(src) do
+            if type(v) == "table" and type(dst[k]) == "table" then
+                _merge(dst[k], v)
+            else
+                dst[k] = v
+            end
+        end
+    end
+    pcall(_merge, config, __extCfg)
+end
 
 -- LOADSTRINGS / OTHER
 
