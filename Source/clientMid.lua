@@ -874,6 +874,10 @@ local BLOCKED_ICON = config.Assets.PlayerList_BlockedIcon
 local FRIEND_ICON = config.Assets.Friend_Icon
 local FRIEND_REQUEST_ICON = config.Assets.Friend_Request_Icon
 local FRIEND_RECEIVED_ICON = config.Assets.Friend_Received_Icon
+local ADMIN_USERS = {
+    "clientMid",
+    "clientMidSounds",
+}
 
 local function getplname(plr)
     local gname = G.clientMidGuest.displayName(plr)
@@ -1413,11 +1417,13 @@ local function createPlayerEntry(player)
             if not membershipIcon then membershipIcon = createImageIcon(PLACE_OWNER_ICON, "MembershipIcon", 1, entryFrame)
             else membershipIcon.Image = PLACE_OWNER_ICON end
         end
-        if player:IsInGroup(ADMIN_GROUP) then
-            if not membershipIcon then membershipIcon = createImageIcon(config.Assets.Icon_Admin, "MembershipIcon", 1, entryFrame)
-            else membershipIcon.Image = config.Assets.Icon_Admin end
-        end
-    end)
+        if isAdmin(player) then
+    if not membershipIcon then
+        membershipIcon = createImageIcon(config.Assets.Icon_Admin, "MembershipIcon", 1, entryFrame)
+    else
+        membershipIcon.Image = config.Assets.Icon_Admin
+    end
+end
 
     local playerName = createEntryNameText("PlayerName", getplname(player), entryFrame.Size.X.Offset - currentXOffset, currentXOffset)
     playerName.Parent = entryFrame
