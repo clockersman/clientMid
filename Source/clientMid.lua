@@ -20,23 +20,6 @@ Version = 0.1.0
 
 -- config
 
--- external config (from getgenv or loadstring varargs) --
-local __extCfg = nil
-do
-    local __vararg = {...}
-    local function _grab()
-        if type(__vararg[1]) == "table" then return __vararg[1] end
-        local g = (type(getgenv) == "function" and getgenv()) or _G
-        if type(g) == "table" then
-            for _, key in ipairs({"ClientMidConfig", "clientMidConfig", "clientMid_config", "Config", "config"}) do
-                if type(g[key]) == "table" then return g[key] end
-            end
-        end
-        return nil
-    end
-    __extCfg = _grab()
-end
-
 
 local config = {
     Platform = "Desktop",
@@ -220,6 +203,23 @@ local config = {
         Scroll_Top_Image = "rbxasset://textures/ui/scroll-top.png",
     }
 }
+
+-- external config (from getgenv or loadstring varargs) --
+local __extCfg = nil
+do
+    local __vararg = {...}
+    local function _grab()
+        if type(__vararg[1]) == "table" then return __vararg[1] end
+        local g = (type(getgenv) == "function" and getgenv()) or _G
+        if type(g) == "table" then
+            for _, key in ipairs({"ClientMidConfig", "clientMidConfig", "clientMid_config", "Config", "config"}) do
+                if type(g[key]) == "table" then return g[key] end
+            end
+        end
+        return nil
+    end
+    __extCfg = _grab()
+end
 
 -- merge external config over defaults (deep merge) --
 if type(__extCfg) == "table" then
