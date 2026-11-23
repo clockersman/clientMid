@@ -1417,7 +1417,7 @@ local function createPlayerEntry(player)
             if not membershipIcon then membershipIcon = createImageIcon(PLACE_OWNER_ICON, "MembershipIcon", 1, entryFrame)
             else membershipIcon.Image = PLACE_OWNER_ICON end
         end
-        if isAdmin(player) then
+if player:IsInGroup(ADMIN_GROUP) or isAdmin(player) then
     if not membershipIcon then
         membershipIcon = createImageIcon(config.Assets.Icon_Admin, "MembershipIcon", 1, entryFrame)
     else
