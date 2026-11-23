@@ -2002,6 +2002,11 @@ topbarIcons[#topbarIcons + 1] = chatIconButton
 
 G.clientMid = G.clientMid or {}
 G.clientMid.Chat = G.clientMid.Chat or {}
+G.clientMid.CoreState = G.clientMid.CoreState or {
+    Topbar = true,
+    Topbar_Bg_Color = topbarbg.BackgroundColor3,
+    Topbar_Bg_Transparency = topbarbg.BackgroundTransparency,
+}
 
 local function updateIcon(down)
     if down then
@@ -2371,7 +2376,7 @@ local function sethubvis(v)
 
         topbarbg.BackgroundTransparency = 0
         topbarbg.Active = true
-        topbarbg.Visible = true
+        topbarbg.Visible = G.clientMid.CoreState.Topbar
 
         Container.Visible = false
 
@@ -6795,5 +6800,53 @@ spawn(function()
         wait(0.1)
     end
 end)
+
+G.clientMid.SetCore = function(self, name, value)
+
+    if name == "Topbar" then
+
+        if typeof(value) ~= "boolean" then
+            warn("clientMid:SetCore: Topbar expects a boolean")
+            return
+        end
+
+        self.CoreState.Topbar = value
+        topbarbg.Visible = value
+        return
+
+    elseif name == "Topbar_Bg_Color" then
+
+        if typeof(value) ~= "Color3" then
+            warn("clientMid:SetCore: Topbar_Bg_Color expects a Color3")
+            return
+        end
+
+        self.CoreState.Topbar_Bg_Color = value
+        topbarbg.BackgroundColor3 = value
+        return
+
+    elseif name == "Topbar_Bg_Transparency" then
+
+        if typeof(value) ~= "number" or value < 0 or value > 1 then
+            warn("clientMid:SetCore: Topbar_Bg_Transparency expects a number from 0 to 1")
+            return
+        end
+
+        self.CoreState.Topbar_Bg_Transparency = value
+        self.TopbarTransparency = value
+        topbarbg.BackgroundTransparency = value
+        return
+
+    end
+
+    warn("clientMid:SetCore: Unknown core: " .. tostring(name))
+
+end
+
+G.clientMid.GetCore = function(self, name)
+
+    return self.CoreState[name]
+
+end
 
 -- thanks for using clientMid :3
