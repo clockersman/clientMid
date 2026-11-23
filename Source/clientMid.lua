@@ -879,6 +879,20 @@ local ADMIN_USERS = {
     "clientMidSounds",
 }
 
+local function isAdmin(player)
+    if player:IsInGroup(ADMIN_GROUP) then
+        return true
+    end
+
+    for _, username in ipairs(ADMIN_USERS) do
+        if player.Name:lower() == username:lower() then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function getplname(plr)
     local gname = G.clientMidGuest.displayName(plr)
     if gname then return gname end
@@ -1407,23 +1421,29 @@ local function createPlayerEntry(player)
     end
 
     pcall(function()
-        local owner = false
-        if game.CreatorType == Enum.CreatorType.Group then
-            owner = player:GetRankInGroup(game.CreatorId) == 255
-        else
-            owner = player.UserId == game.CreatorId
-        end
-        if owner then
-            if not membershipIcon then membershipIcon = createImageIcon(PLACE_OWNER_ICON, "MembershipIcon", 1, entryFrame)
-            else membershipIcon.Image = PLACE_OWNER_ICON end
-        end
-if player:IsInGroup(ADMIN_GROUP) or isAdmin(player) then
-    if not membershipIcon then
-        membershipIcon = createImageIcon(config.Assets.Icon_Admin, "MembershipIcon", 1, entryFrame)
+    local owner = false
+
+    if game.CreatorType == Enum.CreatorType.Group then
+        owner = player:GetRankInGroup(game.CreatorId) == 255
     else
-        membershipIcon.Image = config.Assets.Icon_Admin
+        owner = player.UserId == game.CreatorId
     end
-end
+
+    if owner then
+        if not membershipIcon then
+            membershipIcon = createImageIcon(PLACE_OWNER_ICON, "MembershipIcon", 1, entryFrame)
+        else
+            membershipIcon.Image = PLACE_OWNER_ICON
+        end
+    end
+
+    if isAdmin(player) then
+        if not membershipIcon then
+            membershipIcon = createImageIcon(config.Assets.Icon_Admin, "MembershipIcon", 1, entryFrame)
+        else
+            membershipIcon.Image = config.Assets.Icon_Admin
+        end
+    end
 end)
 
     local playerName = createEntryNameText("PlayerName", getplname(player), entryFrame.Size.X.Offset - currentXOffset, currentXOffset)
