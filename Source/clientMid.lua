@@ -97,7 +97,7 @@ local config = {
     -- backpack search
     BackpackThings = {
             Enabled = true,
-            Keycode = Enum.KeyCode.Z,    
+            Keycode = Enum.KeyCode.Q,    
     },
     
     -- playerlist 
